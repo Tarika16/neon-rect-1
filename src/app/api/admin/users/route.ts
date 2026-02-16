@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+    await cookies(); // Force dynamic
     const session = await auth();
 
     if (!session?.user || (session.user as any).role !== "ADMIN") {
