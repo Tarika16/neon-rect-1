@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+export const dynamic = "force-dynamic";
 import {
     Users,
     CheckCircle,
@@ -192,8 +193,8 @@ export default function AdminPage() {
                                         <td>
                                             <span
                                                 className={`badge ${user.role === "ADMIN"
-                                                        ? "badge-admin"
-                                                        : "badge-user"
+                                                    ? "badge-admin"
+                                                    : "badge-user"
                                                     }`}
                                             >
                                                 {user.role}
@@ -202,8 +203,8 @@ export default function AdminPage() {
                                         <td>
                                             <span
                                                 className={`badge ${user.isApproved
-                                                        ? "badge-approved"
-                                                        : "badge-pending"
+                                                    ? "badge-approved"
+                                                    : "badge-pending"
                                                     }`}
                                             >
                                                 {user.isApproved ? "Approved" : "Pending"}
