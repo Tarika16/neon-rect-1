@@ -56,6 +56,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
+                logger.log(`JWT Callback: User ${user.email} (Role: ${(user as any).role})`);
                 token.role = (user as any).role;
                 token.isApproved = (user as any).isApproved;
                 token.id = (user as any).id;
@@ -63,6 +64,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         async session({ session, token }) {
+            logger.log(`Session Callback: User ${session.user?.email}`);
             if (session.user) {
                 (session.user as any).role = token.role;
                 (session.user as any).isApproved = token.isApproved;
