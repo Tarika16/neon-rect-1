@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
     providers: [
@@ -11,8 +12,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 password: { label: "Password", type: "password" },
             },
             async authorize(credentials) {
+                logger.log(`Attempting login for: ${credentials?.email}`);
+
                 if (!credentials?.email || !credentials?.password) {
-                    console.log("Auth Error: Missing credentials");
+                    logger.log("Auth Error: Missing credentials");
                     return null;
                 }
 
@@ -21,9 +24,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 });
 
                 if (!user) {
-                    console.log(`Auth Error: User not found for email: ${credentials.email}`);
+                    logger.log(`Auth Error: User not found for email: ${credentials.email}`);
                     return null;
                 }
+
+                logger.log(`User found: ${user.email} (Role: ${user.role}, Approved: ${user.isApproved})`);
 
                 const bcrypt = await import("bcryptjs");
                 const isValid = await bcrypt.compare(
@@ -32,9 +37,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 );
 
                 if (!isValid) {
-                    console.log(`Auth Error: Invalid password for user: ${user.email}`);
+                    logger.log(`Auth Error: Invalid password for user: ${user.email}`);
                     return null;
                 }
+
+                logger.log("Auth Success: Password matched");
 
                 return {
                     id: user.id,
