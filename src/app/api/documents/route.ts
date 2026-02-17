@@ -1,0 +1,103 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+// import pdf from "pdf-parse";
+import { parse } from "path";
+
+// We need to disable the default body parser to handle file uploads manually if we weren't using Next.js 13+ App Router's formData()
+// But App Router handles formData() natively.
+
+console.log("Loading /api/documents/route.ts...");
+
+export async function POST(req: Request) {
+    try {
+        const session = await auth();
+        console.log("Upload: Session User ID:", session?.user?.id);
+
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const formData = await req.formData();
+        const file = formData.get("file") as File;
+
+        console.log("Upload: File received:", file?.name, "Type:", file?.type, "Size:", file?.size);
+
+        if (!file) {
+            return NextResponse.json({ error: "No file provided" }, { status: 400 });
+        }
+
+        if (file.type !== "application/pdf" && file.type !== "text/plain") {
+            // Relaxed check for debugging, but keeping it for now
+            return NextResponse.json({ error: `Unsupported file type: ${file.type}` }, { status: 400 });
+        }
+
+        // Read file buffer
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        let content = "";
+
+        if (file.type === "application/pdf") {
+            try {
+                // Dynamic import to prevent top-level crashes
+                const pdfParse = (await import("pdf-parse")).default;
+
+                const data = await pdfParse(buffer);
+                content = data.text;
+                console.log("Upload: PDF parsed, length:", content.length);
+            } catch (pdfError: any) {
+                console.error("Upload: PDF Parse Error", pdfError);
+                return NextResponse.json({
+                    error: `Failed to parse PDF: ${pdfError.message || "Unknown error"}. (Filename: ${file.name}, Type: ${file.type})`
+                }, { status: 500 });
+            }
+        } else {
+            content = buffer.toString("utf-8");
+            console.log("Upload: Text read, length:", content.length);
+        }
+
+        if (!content.trim()) {
+            return NextResponse.json({ error: "File is empty or unreadable" }, { status: 400 });
+        }
+
+        // Save to DB
+        // @ts-ignore - Prisma client type might be lagging, but runtime is verified.
+        console.log("Upload: Saving to DB for user:", (session?.user as any).id);
+        const doc = await (prisma as any).document.create({
+            data: {
+                title: file.name,
+                content: content,
+                userId: (session?.user as any).id,
+            },
+        });
+
+        console.log("Upload: DB Saved:", doc.id);
+
+        return NextResponse.json({ id: doc.id, title: doc.title });
+
+    } catch (error: any) {
+        console.error("Upload Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to process file" }, { status: 500 });
+    }
+}
+
+export async function GET(req: Request) {
+    try {
+        const session = await auth();
+        if (!(session?.user as any)?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // @ts-ignore
+        const docs = await (prisma as any).document.findMany({
+            where: { userId: (session?.user as any).id },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, title: true, createdAt: true } // Don't return full content list to save bandwidth
+        });
+
+        return NextResponse.json(docs);
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}

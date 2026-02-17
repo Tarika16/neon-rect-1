@@ -1,37 +1,30 @@
-async function verify() {
-    const email = `verify_${Date.now()}@example.com`;
-    console.log(`Attempting to sign up with: ${email}`);
+const http = require('http');
 
-    try {
-        const response = await fetch("http://localhost:3000/api/signup", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name: "Verification User",
-                email: email,
-                password: "password123"
-            })
-        });
+const options = {
+    hostname: 'localhost',
+    port: 3000,
+    path: '/api/documents',
+    method: 'GET',
+};
 
-        console.log("Status:", response.status);
-        const text = await response.text();
+const req = http.request(options, (res) => {
+    console.log(`STATUS: ${res.statusCode}`);
+    console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
 
-        try {
-            const data = JSON.parse(text);
-            console.log("JSON Response:", JSON.stringify(data, null, 2));
-            if (response.status === 201) {
-                console.log("✅ API Verification SUCCESSFUL!");
-            } else {
-                console.log("❌ API Verification FAILED (Status check)!");
-            }
-        } catch (e) {
-            console.log("Response is NOT JSON. Raw text preview:");
-            console.log(text.substring(0, 500));
-            console.log("❌ API Verification FAILED (Not JSON)!");
-        }
-    } catch (err) {
-        console.error("❌ Network error:", err.message);
-    }
-}
+    let data = '';
+    res.on('data', (chunk) => {
+        data += chunk;
+    });
 
-verify();
+    res.on('end', () => {
+        console.log('BODY START:');
+        console.log(data.substring(0, 2000)); // Print more to see error details
+        console.log('BODY END');
+    });
+});
+
+req.on('error', (e) => {
+    console.error(`problem with request: ${e.message}`);
+});
+
+req.end();

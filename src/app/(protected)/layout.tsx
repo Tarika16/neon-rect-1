@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, Users, Shield, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Shield, LogOut, FileText } from "lucide-react";
 import { SignOutButton } from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +35,13 @@ export default async function DashboardLayout({
                         <Link href="/admin" className="sidebar-link">
                             <Users size={18} />
                             Manage Users
+                            Manage Users
                         </Link>
                     )}
+                    <Link href="/dashboard/documents" className="sidebar-link">
+                        <FileText size={18} />
+                        Documents
+                    </Link>
                 </nav>
 
                 <div

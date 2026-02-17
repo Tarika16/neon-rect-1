@@ -1,0 +1,10 @@
+Neon Admin Dashboard - Feature Overview
+
+1. Authentication
+The system uses NextAuth.js v5 for secure authentication. User data is stored in a Neon PostgreSQL database. There are two roles: ADMIN and USER. New users must be approved by an admin before accessing the dashboard.
+
+2. Admin Interface
+Admins can view a list of all users, approve or reject new registrations, and manage user roles. This ensures tight security and control over who accesses the system.
+
+3. Document Q&A
+This feature allows users to upload PDF or Text documents. The system uses the Groq API (Llama 3 model) to analyze the text. Users can then ask questions in natural language, and the AI provides answers based strictly on the uploaded document's content. This demonstrates a RAG (Retrieval-Augmented Generation) workflow.
