@@ -40,7 +40,7 @@ export default function Home() {
         </p>
 
         <div className="hero-buttons">
-          <Link href="/signup" className="btn btn-primary">
+          <Link href="#features" className="btn btn-primary">
             Get Started <ArrowRight size={16} />
           </Link>
           <Link href="/login" className="btn btn-outline">
@@ -70,6 +70,38 @@ export default function Home() {
             Secure Auth
           </div>
         </div>
+
+        {/* Features Section */}
+        <div id="features" style={{ marginTop: "8rem", textAlign: "left" }}>
+          <h2 style={{ fontSize: "2rem", marginBottom: "2rem", textAlign: "center" }}>Why Choose This Dashboard?</h2>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "2rem" }}>
+            <div className="glass-card" style={{ padding: "1.5rem" }}>
+              <Shield size={32} color="#6c63ff" style={{ marginBottom: "1rem" }} />
+              <h3 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>Admin Console</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                Full control over user accounts. Approve, reject, or delete users with a single click.
+              </p>
+            </div>
+
+            <div className="glass-card" style={{ padding: "1.5rem" }}>
+              <Lock size={32} color="#22c55e" style={{ marginBottom: "1rem" }} />
+              <h3 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>Role-Based Access</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                Secure roles (Admin vs User). Critical actions are protected and validated on the server.
+              </p>
+            </div>
+
+            <div className="glass-card" style={{ padding: "1.5rem" }}>
+              <Users size={32} color="#f59e0b" style={{ marginBottom: "1rem" }} />
+              <h3 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>User Workflows</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                Seamless signup flow with "Pending Approval" state handling to prevent unauthorized access.
+              </p>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
