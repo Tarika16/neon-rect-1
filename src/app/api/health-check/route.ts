@@ -8,7 +8,7 @@ export async function GET() {
         // 1. Check Env Vars
         const envStatus = {
             DATABASE_URL: process.env.DATABASE_URL ? "Set" : "MISSING",
-            AUTH_SECRET: process.env.AUTH_SECRET ? "Set" : "MISSING",
+            AUTH_SECRET: process.env.AUTH_SECRET ? `Set (Length: ${process.env.AUTH_SECRET.length})` : "MISSING",
             NEXTAUTH_URL: process.env.NEXTAUTH_URL || "MISSING",
             NODE_ENV: process.env.NODE_ENV,
         };
