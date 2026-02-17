@@ -13,6 +13,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) {
+                    console.log("Auth Error: Missing credentials");
                     return null;
                 }
 
@@ -20,14 +21,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     where: { email: credentials.email as string },
                 });
 
-                if (!user) return null;
+                if (!user) {
+                    console.log(`Auth Error: User not found for email: ${credentials.email}`);
+                    return null;
+                }
 
                 const isValid = await bcrypt.compare(
                     credentials.password as string,
                     user.password
                 );
 
-                if (!isValid) return null;
+                if (!isValid) {
+                    console.log(`Auth Error: Invalid password for user: ${user.email}`);
+                    return null;
+                }
 
                 return {
                     id: user.id,
