@@ -4,44 +4,66 @@
 let extractor: any = null;
 
 // Function to get the pipeline
+// Function to get the pipeline
 async function getPipeline() {
     if (!extractor) {
-        const { pipeline, env } = await import("@xenova/transformers");
-
-        // Vercel friendly configuration
-        env.allowLocalModels = false;
-        env.useBrowserCache = false;
-        env.cacheDir = "/tmp";
-
-        // Force WASM backend instead of native shared objects (.so)
-        // @ts-ignore
-        env.backends.onnx.wasm.numThreads = 1;
-        // @ts-ignore
-        env.backends.onnx.wasm.proxy = false;
-
-        console.log("Xenova: Loading model...");
-        const start = Date.now();
         try {
-            // Use a small, efficient model for embeddings
+            const { pipeline, env } = await import("@xenova/transformers");
+
+            // Vercel friendly configuration
+            env.allowLocalModels = false;
+            env.useBrowserCache = false;
+            env.cacheDir = "/tmp";
+
+            // Force WASM backend
+            // @ts-ignore
+            env.backends.onnx.wasm.numThreads = 1;
+
             extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-            console.log(`Xenova: Model loaded in ${Date.now() - start}ms`);
-        } catch (e: any) {
-            console.error("Xenova: Model Load Error:", e);
-            throw e;
+        } catch (e) {
+            console.warn("Xenova local model failed to load, will attempt OpenAI fallback if configured.", e);
+            return null;
         }
     }
     return extractor;
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
+    // Priority 1: OpenAI Embedding (Fastest & most reliable on Vercel)
+    if (process.env.OPENAI_API_KEY) {
+        try {
+            const response = await fetch("https://api.openai.com/v1/embeddings", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    input: text,
+                    model: "text-embedding-3-small"
+                })
+            });
+            const result = await response.json();
+            if (result.data?.[0]?.embedding) {
+                return result.data[0].embedding;
+            }
+            console.error("OpenAI Embedding Error:", result);
+        } catch (apiError) {
+            console.error("OpenAI API call failed:", apiError);
+        }
+    }
+
+    // Priority 2: Local Xenova (Fallback)
     try {
         const pipe = await getPipeline();
-        const output = await pipe(text, { pooling: "mean", normalize: true });
-        // Convert Float32Array to regular array
-        return Array.from(output.data);
+        if (pipe) {
+            const output = await pipe(text, { pooling: "mean", normalize: true });
+            return Array.from(output.data);
+        }
+        throw new Error("No embedding engine available (OpenAI key missing and Xenova failed)");
     } catch (error: any) {
-        console.error("Embedding Error:", error);
-        throw error; // Throw original error to see actual cause
+        console.error("Embedding core failure:", error);
+        throw error;
     }
 }
 
