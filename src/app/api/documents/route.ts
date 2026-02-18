@@ -45,12 +45,11 @@ export async function POST(req: Request) {
 
         if (isPdf) {
             try {
-                // Dynamic import to prevent top-level crashes
-                const pdfParse = (await import("pdf-parse-fork")).default;
-
-                const data = await pdfParse(buffer);
-                content = data.text;
-                console.log("Upload: PDF parsed, length:", content.length);
+                // unpdf is a more reliable, serverless-friendly alternative
+                const { extractText } = await import("unpdf");
+                const { text } = await extractText(buffer);
+                content = Array.isArray(text) ? text.join("\n") : text;
+                console.log("Upload: PDF parsed via unpdf, length:", content.length);
             } catch (pdfError: any) {
                 console.error("Upload: PDF Parse Error", pdfError);
                 return NextResponse.json({
