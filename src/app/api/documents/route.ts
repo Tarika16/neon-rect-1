@@ -47,7 +47,7 @@ export async function POST(req: Request) {
             try {
                 // unpdf is a more reliable, serverless-friendly alternative
                 const { extractText } = await import("unpdf");
-                const { text } = await extractText(buffer);
+                const { text } = await extractText(new Uint8Array(buffer));
                 content = Array.isArray(text) ? text.join("\n") : text;
                 console.log("Upload: PDF parsed via unpdf, length:", content.length);
             } catch (pdfError: any) {
