@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    element: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth();
@@ -12,7 +12,7 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const workspaceId = params.id;
+        const { id: workspaceId } = await element.params;
 
         // Fetch all documents in the workspace
         const documents = await (prisma as any).document.findMany({

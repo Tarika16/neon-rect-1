@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 
 export async function DELETE(
     req: Request,
-    { params }: { params: { id: string } }
+    element: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth();
@@ -12,7 +12,7 @@ export async function DELETE(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const docId = params.id;
+        const { id: docId } = await element.params;
 
         // Verify ownership and existence
         const document = await (prisma as any).document.findFirst({
