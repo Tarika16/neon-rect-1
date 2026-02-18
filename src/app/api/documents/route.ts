@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         if (isPdf) {
             try {
                 // Dynamic import to prevent top-level crashes
-                const pdfParse = (await import("pdf-parse")).default;
+                const pdfParse = (await import("pdf-parse-fork")).default;
 
                 const data = await pdfParse(buffer);
                 content = data.text;
