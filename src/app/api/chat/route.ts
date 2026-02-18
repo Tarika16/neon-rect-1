@@ -173,7 +173,14 @@ export async function POST(req: Request) {
         return result.toTextStreamResponse();
 
     } catch (error: any) {
-        console.error("Chat Error:", error);
-        return new Response(error.message || "Failed to generate answer", { status: 500 });
+        console.error("Chat API Detailed Error:", {
+            message: error.message,
+            stack: error.stack,
+            cause: error.cause
+        });
+        return new Response(JSON.stringify({ error: error.message || "Failed to generate answer" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+        });
     }
 }

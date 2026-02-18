@@ -307,9 +307,10 @@ export default function WorkspaceDetailPage() {
                     m.id === aiMessageId ? { ...m, content: mainContent, suggestions: questions } : m
                 ));
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Chat error:", error);
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: "assistant", content: "Sorry, something went wrong." }]);
+            const msg = error.message || "Something went wrong";
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: "assistant", content: `Sorry, there was an error: ${msg}. Please try again.` }]);
         } finally {
             setIsLoading(false);
         }
