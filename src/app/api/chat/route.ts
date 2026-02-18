@@ -13,72 +13,102 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { documentId, workspaceId, question, includeWebSearch } = await req.json();
+        const { workspaceId, question, includeWebSearch } = await req.json();
 
-        if (!question) {
-            return NextResponse.json({ error: "Missing question" }, { status: 400 });
+        if (!question || !workspaceId) {
+            return NextResponse.json({ error: "Missing question or workspaceId" }, { status: 400 });
         }
 
-        // Logic: Fetch Context (Single Doc OR Workspace)
+        console.log(`Chat: Processing question "${question}" for workspace ${workspaceId}`);
+
+        // 1. Generate Query Embedding
+        const { generateEmbedding } = await import("@/lib/rag");
+        const queryEmbedding = await generateEmbedding(question);
+
+        // 2. Vector Search (Semantic Retrieval)
+        // Find top 5 chunks most similar to query_embedding within the workspace
+        // We join DocumentChunk -> Document to filter by workspaceId
+        const vectorResults: any[] = await prisma.$queryRaw`
+            SELECT 
+                chunk.id,
+                chunk.content,
+                chunk.metadata,
+                doc.title as "docTitle",
+                1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
+            FROM "DocumentChunk" chunk
+            JOIN "Document" doc ON chunk."documentId" = doc.id
+            WHERE doc."workspaceId" = ${workspaceId}
+            AND doc."userId" = ${session.user.id}
+            ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
+            LIMIT 5;
+        `;
+
+        console.log(`Chat: Found ${vectorResults.length} relevant chunks`);
+
+        // 3. Evaluate Retrieval Quality
+        const topScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
+        console.log(`Chat: Top similarity score: ${topScore}`);
+
         let contextText = "";
+        let sources: any[] = [];
 
-        // 1. Internal Documents
-        if (workspaceId) {
-            // Fetch ALL docs in workspace
-            const docs = await (prisma as any).document.findMany({
-                where: { workspaceId: workspaceId, userId: session.user.id },
-                select: { id: true, title: true, content: true }
+        // Format Document Context
+        if (vectorResults.length > 0) {
+            contextText += "## Internal Knowledge:\n";
+            vectorResults.forEach((chunk, index) => {
+                // Add to context
+                contextText += `[${index + 1}] Document: "${chunk.docTitle}"\nContent: ${chunk.content}\n\n`;
+                // Track source for frontend
+                sources.push({
+                    id: index + 1,
+                    type: "document",
+                    title: chunk.docTitle,
+                    content: chunk.content
+                });
             });
-
-            if (docs.length === 0) {
-                return NextResponse.json({ error: "Workspace is empty or not found" }, { status: 404 });
-            }
-
-            // Context Stuffing: XML Style
-            contextText += "<internal-knowledge>\n";
-            for (const doc of docs) {
-                // Truncate individual docs slightly to fit more
-                const safeContent = doc.content.slice(0, 30000);
-                contextText += `<document title="${doc.title}">\n${safeContent}\n</document>\n\n`;
-            }
-            contextText += "</internal-knowledge>\n\n";
-
-        } else if (documentId) {
-            // Single Doc Mode (Backwards compatibility)
-            const doc = await (prisma as any).document.findUnique({
-                where: { id: documentId },
-            });
-
-            if (!doc || doc.userId !== session.user.id) {
-                return NextResponse.json({ error: "Document not found or forbidden" }, { status: 404 });
-            }
-            contextText += `<document title="${doc.title}">\n${doc.content.slice(0, 50000)}\n</document>\n\n`;
-        } else {
-            return NextResponse.json({ error: "Missing documentId or workspaceId" }, { status: 400 });
         }
 
-        // 2. External Web Search (Firecrawl)
-        if (includeWebSearch) {
-            const webResults = await searchFirecrawl(question, 3);
-            if (webResults.length > 0) {
-                contextText += "<web-search-results>\n";
-                for (const res of webResults) {
-                    contextText += `<result title="${res.title}" url="${res.url}">\n${res.markdown || res.content}\n</result>\n\n`;
+        // 4. Hybrid Logic: Web Search Fallback
+        // Trigger if: 
+        // a) Explicitly requested (includeWebSearch = true)
+        // b) Poor vector match (score < 0.5) AND we have no good results
+        const isPoorMatch = topScore < 0.5;
+        const shouldSearchWeb = includeWebSearch || (isPoorMatch && vectorResults.length < 2);
+
+        if (shouldSearchWeb) {
+            console.log("Chat: Triggering Web Search (Fallback/Requested)...");
+            try {
+                const webResults = await searchFirecrawl(question, 3);
+                if (webResults.length > 0) {
+                    contextText += "## Web Search Results:\n";
+                    webResults.forEach((res, index) => {
+                        const sourceIndex = sources.length + 1;
+                        contextText += `[${sourceIndex}] Source: "${res.title}" (${res.url})\nContent: ${res.markdown || res.content}\n\n`;
+                        sources.push({
+                            id: sourceIndex,
+                            type: "web",
+                            title: res.title,
+                            url: res.url,
+                            content: res.content
+                        });
+                    });
                 }
-                contextText += "</web-search-results>\n\n";
+            } catch (webError) {
+                console.error("Chat: Web Search Failed", webError);
+                // Continue without web results
             }
         }
 
-        // Construct System Prompt
-        const systemPrompt = `You are an advanced AI assistant tailored for research and analysis.
+        // 5. LLM Generation
+        const systemPrompt = `You are an expert research assistant.
         
-        Your Goal: Answer the user's question using ONLY the provided context below.
+        Goal: Answer the user's question using ONLY the provided context.
         
-        Instructions:
-        1. Search through the <internal-knowledge> and <web-search-results> provided.
-        2. Synthesize an answer that combines information from multiple documents or web sources if necessary.
-        3. CITATIONS ARE MANDATORY. When you use a piece of information, you must append [Source: Document Title] or [Source: URL] immediately after the sentence.
-        4. If the answer is not in the context, state "I cannot find the answer in the provided documents or search results."
+        Rules:
+        1. Use the [number] to cite your sources inline. Example: "The project deadline is Friday [1]."
+        2. If the context has both Internal Knowledge and Web Search Results, synthesize them.
+        3. If the answer is NOT in the context, say "I cannot find the answer in the provided documents or web search."
+        4. Be concise and professional.
         
         Context:
         ${contextText}
@@ -94,7 +124,11 @@ export async function POST(req: Request) {
 
         const answer = completion.choices[0]?.message?.content || "No answer generated.";
 
-        return NextResponse.json({ answer });
+        return NextResponse.json({
+            answer,
+            sources,
+            isWebFallback: shouldSearchWeb
+        });
 
     } catch (error: any) {
         console.error("Chat Error:", error);

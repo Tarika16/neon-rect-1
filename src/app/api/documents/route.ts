@@ -63,7 +63,7 @@ export async function POST(req: Request) {
 
         // Save to DB
         // @ts-ignore
-        const doc = await (prisma as any).document.create({
+        const doc = await prisma.document.create({
             data: {
                 title: file.name,
                 content: content,
@@ -72,7 +72,44 @@ export async function POST(req: Request) {
             },
         });
 
-        console.log("Upload: DB Saved:", doc.id);
+        console.log("Upload: DB Saved Document:", doc.id);
+
+        // RAG Ingestion: Chunk & Embed
+        try {
+            const { chunkText, generateEmbedding } = await import("@/lib/rag");
+            const chunks = chunkText(content);
+            console.log(`Upload: Generated ${chunks.length} chunks`);
+
+            for (const chunkContent of chunks) {
+                const embedding = await generateEmbedding(chunkContent);
+
+                // Save chunk with embedding
+                // Prisma doesn't support vector types directly in create/update yet without raw query or specific setup
+                // But with the extension enabled, we can try to pass it if typed correctly, or use $executeRaw
+
+                // Workaround for Unsupported type in Prisma:
+                // We create the chunk first, then update it with raw SQL for the vector
+                const chunk = await prisma.documentChunk.create({
+                    data: {
+                        content: chunkContent,
+                        documentId: doc.id,
+                        metadata: { source: file.name }
+                    }
+                });
+
+                // Update vector using raw SQL
+                await prisma.$executeRaw`
+                    UPDATE "DocumentChunk"
+                    SET embedding = ${embedding}::vector
+                    WHERE id = ${chunk.id}
+                `;
+            }
+            console.log("Upload: Embeddings generated and saved.");
+
+        } catch (ragError) {
+            console.error("RAG Ingestion Error:", ragError);
+            // We don't fail the upload if RAG fails, but we should probably log it well
+        }
 
         return NextResponse.json({ id: doc.id, title: doc.title, workspaceId: doc.workspaceId });
 

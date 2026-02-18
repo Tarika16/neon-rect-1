@@ -11,9 +11,18 @@ interface Document {
     createdAt: string;
 }
 
+interface Source {
+    id: number;
+    type: "document" | "web";
+    title: string;
+    content: string;
+    url?: string;
+}
+
 interface Message {
     role: "user" | "ai";
     content: string;
+    sources?: Source[];
 }
 
 export default function WorkspaceDetailPage() {
@@ -110,7 +119,11 @@ export default function WorkspaceDetailPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed");
 
-            setMessages((prev) => [...prev, { role: "ai", content: data.answer }]);
+            setMessages((prev) => [...prev, {
+                role: "ai",
+                content: data.answer,
+                sources: data.sources
+            }]);
         } catch (error) {
             setMessages((prev) => [...prev, { role: "ai", content: "⚠️ Error: Could not generate answer. Check API Key or Workspace content." }]);
         } finally {
@@ -191,19 +204,43 @@ export default function WorkspaceDetailPage() {
 
                 <div className="flex-1 p-4 overflow-y-auto space-y-4">
                     {messages.map((m, i) => (
-                        <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
                             <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === "user"
                                 ? "bg-purple-600 text-white rounded-tr-none"
                                 : "bg-gray-800/80 text-gray-200 border border-white/10 rounded-tl-none whitespace-pre-wrap"
                                 }`}>
                                 {m.content}
                             </div>
+
+                            {/* Sources Section */}
+                            {m.sources && m.sources.length > 0 && (
+                                <div className="mt-2 text-xs flex flex-wrap gap-2 max-w-[85%]">
+                                    {m.sources.map((source, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="bg-black/30 border border-white/10 px-2 py-1 rounded-md flex items-center gap-1 text-gray-400 hover:bg-white/5 transition-colors cursor-help group relative"
+                                            title={source.content.slice(0, 200) + "..."}
+                                        >
+                                            <span className="font-mono text-purple-400">[{source.id}]</span>
+                                            <span className="truncate max-w-[150px]">{source.title}</span>
+                                            {source.type === "web" && <Globe size={10} className="ml-1" />}
+
+                                            {/* Tooltip for Content Preview (Simple CSS based) */}
+                                            <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-gray-900 border border-white/20 rounded shadow-xl hidden group-hover:block z-50">
+                                                <p className="font-bold text-gray-300 mb-1">{source.title}</p>
+                                                <p className="line-clamp-4">{source.content}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))}
                     {loading && (
                         <div className="flex justify-start">
-                            <div className="bg-gray-800/80 p-3 rounded-2xl rounded-tl-none border border-white/10">
+                            <div className="bg-gray-800/80 p-3 rounded-2xl rounded-tl-none border border-white/10 flex items-center gap-2">
                                 <Loader2 className="animate-spin text-purple-400" size={20} />
+                                <span className="text-gray-400 text-sm">Thinking... {deepSearch && "(Searching Web)"}</span>
                             </div>
                         </div>
                     )}

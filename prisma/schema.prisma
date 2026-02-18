@@ -1,11 +1,13 @@
 generator client {
   provider = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x", "linux-musl", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 enum Role {
@@ -37,12 +39,25 @@ model Workspace {
 }
 
 model Document {
-  id          String     @id @default(cuid())
+  id          String          @id @default(cuid())
   title       String
-  content     String     @db.Text
+  content     String          @db.Text
   userId      String
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspaceId String?
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  createdAt   DateTime   @default(now())
+  workspace   Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks      DocumentChunk[]
+  createdAt   DateTime        @default(now())
+}
+
+model DocumentChunk {
+  id         String   @id @default(cuid())
+  content    String   @db.Text
+  embedding  Unsupported("vector(384)")?
+  metadata   Json?
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
 }
