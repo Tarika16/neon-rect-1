@@ -8,8 +8,16 @@ async function getPipeline() {
     if (!extractor) {
         const { pipeline, env } = await import("@xenova/transformers");
 
-        // Use /tmp for caching models as it's the only writable place on Vercel
+        // Vercel friendly configuration
+        env.allowLocalModels = false;
+        env.useBrowserCache = false;
         env.cacheDir = "/tmp";
+
+        // Force WASM backend instead of native shared objects (.so)
+        // @ts-ignore
+        env.backends.onnx.wasm.numThreads = 1;
+        // @ts-ignore
+        env.backends.onnx.wasm.proxy = false;
 
         console.log("Xenova: Loading model...");
         const start = Date.now();
