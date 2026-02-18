@@ -38,7 +38,8 @@ export async function POST(req: Request) {
             console.timeEnd("Chat: Embedding");
         } catch (embedError: any) {
             console.error("Chat: Embedding generation failed:", embedError);
-            throw new Error(`Failed to process question context: ${embedError.message}`);
+            const detail = embedError.message || JSON.stringify(embedError) || "Unknown Xenova Error";
+            throw new Error(`Failed to process question context: ${detail}`);
         }
 
         // 2. Vector Search (Semantic Retrieval)

@@ -11,6 +11,7 @@ async function getPipeline() {
         // Vercel friendly configuration
         env.allowLocalModels = false;
         env.useBrowserCache = false;
+        env.cacheDir = "/tmp";
 
         // Use a small, efficient model for embeddings
         extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
