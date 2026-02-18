@@ -322,13 +322,17 @@ export default function WorkspaceDetailPage() {
                 ));
             }
         } catch (error: any) {
-            console.error("Chat error:", error);
+            console.error("Chat error details:", error);
             const msg = error.message || "An unidentified error occurred.";
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: "assistant",
-                content: `Error: ${msg}. If this persists, try refreshing or use a shorter question.`
-            }]);
+            setMessages(prev => {
+                // Remove the empty AI message we added right before the failure
+                const filtered = prev.filter(m => !(m.role === "assistant" && m.content === ""));
+                return [...filtered, {
+                    id: Date.now().toString(),
+                    role: "assistant",
+                    content: `Error: ${msg}. If this keeps happening, try a shorter question or check your connection.`
+                }];
+            });
         } finally {
             setIsLoading(false);
         }
