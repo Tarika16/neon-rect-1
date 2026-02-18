@@ -8,13 +8,19 @@ async function getPipeline() {
     if (!extractor) {
         const { pipeline, env } = await import("@xenova/transformers");
 
-        // Vercel friendly configuration
-        env.allowLocalModels = false;
-        env.useBrowserCache = false;
+        // Use /tmp for caching models as it's the only writable place on Vercel
         env.cacheDir = "/tmp";
 
-        // Use a small, efficient model for embeddings
-        extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+        console.log("Xenova: Loading model...");
+        const start = Date.now();
+        try {
+            // Use a small, efficient model for embeddings
+            extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+            console.log(`Xenova: Model loaded in ${Date.now() - start}ms`);
+        } catch (e: any) {
+            console.error("Xenova: Model Load Error:", e);
+            throw e;
+        }
     }
     return extractor;
 }

@@ -571,7 +571,7 @@ export default function WorkspaceDetailPage() {
                         <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center">
                             <h3 className="font-bold text-lg flex items-center gap-2">
                                 <MessageSquare className="text-green-400" />
-                                Workspace Chat
+                                Workspace Chat <span className="text-[10px] text-gray-500 font-mono opacity-50">v1.2.1-stable</span>
                             </h3>
 
                             {/* Download Chat */}
