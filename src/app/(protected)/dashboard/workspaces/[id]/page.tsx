@@ -35,6 +35,7 @@ export default function WorkspaceDetailPage() {
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [deepSearch, setDeepSearch] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
@@ -66,9 +67,11 @@ export default function WorkspaceDetailPage() {
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
         setUploading(true);
+        setError(null);
 
         const files = Array.from(e.target.files);
         let successCount = 0;
+        let errors: string[] = [];
 
         for (const file of files) {
             const formData = new FormData();
@@ -83,10 +86,18 @@ export default function WorkspaceDetailPage() {
 
                 if (res.ok) {
                     successCount++;
+                } else {
+                    const data = await res.json();
+                    errors.push(`${file.name}: ${data.error || "Upload failed"}`);
                 }
             } catch (error) {
                 console.error("Upload failed for", file.name, error);
+                errors.push(`${file.name}: Network error`);
             }
+        }
+
+        if (errors.length > 0) {
+            setError(errors.join(", "));
         }
 
         if (successCount > 0) {
@@ -151,11 +162,18 @@ export default function WorkspaceDetailPage() {
                         type="file"
                         ref={fileInputRef}
                         className="hidden"
-                        accept=".pdf,.txt"
+                        accept=".pdf,application/pdf,.txt,text/plain"
                         multiple
                         onChange={handleUpload}
                     />
                 </div>
+
+                {error && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                        {error}
+                        <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
+                    </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                     {documents.length === 0 && (

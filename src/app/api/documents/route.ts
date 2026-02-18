@@ -28,8 +28,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
-        if (file.type !== "application/pdf" && file.type !== "text/plain") {
-            return NextResponse.json({ error: `Unsupported file type: ${file.type}` }, { status: 400 });
+        console.log(`Upload: Checking file type: ${file.type}, name: ${file.name}`);
+
+        const isPdf = file.type.includes("pdf") || file.name.toLowerCase().endsWith(".pdf");
+        const isText = file.type.includes("text") || file.name.toLowerCase().endsWith(".txt");
+
+        if (!isPdf && !isText) {
+            return NextResponse.json({ error: `Unsupported file type: ${file.type} (${file.name})` }, { status: 400 });
         }
 
         // Read file buffer
@@ -38,7 +43,7 @@ export async function POST(req: Request) {
 
         let content = "";
 
-        if (file.type === "application/pdf") {
+        if (isPdf) {
             try {
                 // Dynamic import to prevent top-level crashes
                 const pdfParse = (await import("pdf-parse")).default;
