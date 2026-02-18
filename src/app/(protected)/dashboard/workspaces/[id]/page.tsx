@@ -270,7 +270,16 @@ export default function WorkspaceDetailPage() {
                 })
             });
 
-            if (!res.ok) throw new Error(res.statusText);
+            if (!res.ok) {
+                let errorMessage = `Server Error (${res.status})`;
+                try {
+                    const errorJson = await res.json();
+                    if (errorJson.error) errorMessage = errorJson.error;
+                } catch (e) {
+                    errorMessage = `${res.status} ${res.statusText}`;
+                }
+                throw new Error(errorMessage);
+            }
 
             // Create placeholder for AI response
             const aiMessageId = (Date.now() + 1).toString();
