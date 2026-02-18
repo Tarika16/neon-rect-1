@@ -5,9 +5,13 @@ import { prisma } from "@/lib/db";
 import { searchFirecrawl } from "@/lib/firecrawl";
 
 // Configure Groq as an OpenAI-compatible provider
+if (!process.env.GROQ_API_KEY) {
+    console.warn("GROQ_API_KEY is missing from environment variables.");
+}
+
 const groq = createOpenAI({
     baseURL: "https://api.groq.com/openai/v1",
-    apiKey: process.env.GROQ_API_KEY,
+    apiKey: process.env.GROQ_API_KEY || "dummy_key",
 });
 
 export async function POST(req: Request) {
@@ -27,23 +31,35 @@ export async function POST(req: Request) {
 
         // 1. Generate Query Embedding
         const { generateEmbedding } = await import("@/lib/rag");
-        const queryEmbedding = await generateEmbedding(question);
+        let queryEmbedding;
+        try {
+            queryEmbedding = await generateEmbedding(question);
+        } catch (embedError) {
+            console.error("Chat: Embedding generation failed:", embedError);
+            throw new Error("Failed to process question context.");
+        }
 
         // 2. Vector Search (Semantic Retrieval)
-        const vectorResults: any[] = await prisma.$queryRaw`
-            SELECT 
-                chunk.id,
-                chunk.content,
-                chunk.metadata,
-                doc.title as "docTitle",
-                1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
-            FROM "DocumentChunk" chunk
-            JOIN "Document" doc ON chunk."documentId" = doc.id
-            WHERE doc."workspaceId" = ${workspaceId}
-            AND doc."userId" = ${session.user.id}
-            ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
-            LIMIT 5;
-        `;
+        let vectorResults: any[] = [];
+        try {
+            vectorResults = await prisma.$queryRaw`
+                SELECT 
+                    chunk.id,
+                    chunk.content,
+                    chunk.metadata,
+                    doc.title as "docTitle",
+                    1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
+                FROM "DocumentChunk" chunk
+                JOIN "Document" doc ON chunk."documentId" = doc.id
+                WHERE doc."workspaceId" = ${workspaceId}
+                AND doc."userId" = ${session.user.id}
+                ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
+                LIMIT 5;
+            `;
+        } catch (vectorError) {
+            console.error("Chat: Vector Search failed:", vectorError);
+            // Non-fatal, proceed with empty context if vector search fails
+        }
 
         // 3. Evaluate Retrieval Quality
         const topScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
@@ -95,15 +111,18 @@ export async function POST(req: Request) {
         // 5. Streaming LLM Generation
 
         // 5. Save User Message
-        // @ts-ignore - Local types may be outdated due to file lock
-        await prisma.message.create({
-            data: {
-                role: "user",
-                content: question,
-                workspaceId: workspaceId as string,
-                userId: session.user.id as string,
-            },
-        });
+        try {
+            await prisma.message.create({
+                data: {
+                    role: "user",
+                    content: question,
+                    workspaceId: workspaceId as string,
+                    userId: session.user.id as string,
+                },
+            });
+        } catch (dbError) {
+            console.error("Chat: Failed to save user message:", dbError);
+        }
 
         // 6. Streaming LLM Generation
         const userId = session.user.id as string;
@@ -129,15 +148,18 @@ export async function POST(req: Request) {
             messages: [{ role: "user", content: question }],
             onFinish: async (event) => {
                 // Save AI Message when stream completes
-                // @ts-ignore - Local types may be outdated due to file lock
-                await prisma.message.create({
-                    data: {
-                        role: "assistant",
-                        content: event.text,
-                        workspaceId: wsId,
-                        userId: userId,
-                    },
-                });
+                try {
+                    await prisma.message.create({
+                        data: {
+                            role: "assistant",
+                            content: event.text,
+                            workspaceId: wsId,
+                            userId: userId,
+                        },
+                    });
+                } catch (dbError) {
+                    console.error("Chat: Failed to save assistant message:", dbError);
+                }
             },
         });
 
