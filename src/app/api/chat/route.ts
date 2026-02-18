@@ -112,7 +112,7 @@ export async function POST(req: Request) {
 
         // 5. Save User Message
         try {
-            await prisma.message.create({
+            await (prisma as any).message.create({
                 data: {
                     role: "user",
                     content: question,
@@ -149,7 +149,7 @@ export async function POST(req: Request) {
             onFinish: async (event) => {
                 // Save AI Message when stream completes
                 try {
-                    await prisma.message.create({
+                    await (prisma as any).message.create({
                         data: {
                             role: "assistant",
                             content: event.text,
