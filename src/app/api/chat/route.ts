@@ -30,16 +30,19 @@ export async function POST(req: Request) {
         console.log(`Chat: Processing question "${question}" for workspace ${workspaceId}`);
 
         // 1. Generate Query Embedding
+        console.time("Chat: Embedding");
         const { generateEmbedding } = await import("@/lib/rag");
         let queryEmbedding;
         try {
             queryEmbedding = await generateEmbedding(question);
+            console.timeEnd("Chat: Embedding");
         } catch (embedError) {
             console.error("Chat: Embedding generation failed:", embedError);
             throw new Error("Failed to process question context.");
         }
 
         // 2. Vector Search (Semantic Retrieval)
+        console.time("Chat: VectorSearch");
         let vectorResults: any[] = [];
         try {
             vectorResults = await prisma.$queryRaw`
@@ -56,8 +59,10 @@ export async function POST(req: Request) {
                 ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
                 LIMIT 5;
             `;
-        } catch (vectorError) {
+            console.timeEnd("Chat: VectorSearch");
+        } catch (vectorError: any) {
             console.error("Chat: Vector Search failed:", vectorError);
+            console.timeEnd("Chat: VectorSearch");
             // Non-fatal, proceed with empty context if vector search fails
         }
 
@@ -87,8 +92,10 @@ export async function POST(req: Request) {
 
         if (shouldSearchWeb) {
             console.log("Chat: Triggering Web Search...");
+            console.time("Chat: WebSearch");
             try {
                 const webResults = await searchFirecrawl(question, 3);
+                console.timeEnd("Chat: WebSearch");
                 if (webResults.length > 0) {
                     contextText += "## Web Search Results:\n";
                     webResults.forEach((res, index) => {
@@ -103,8 +110,9 @@ export async function POST(req: Request) {
                         });
                     });
                 }
-            } catch (webError) {
+            } catch (webError: any) {
                 console.error("Chat: Web Search Failed", webError);
+                console.timeEnd("Chat: WebSearch");
             }
         }
 
@@ -149,11 +157,13 @@ export async function POST(req: Request) {
         ${contextText}
         `;
 
+        console.time("Chat: StreamStarting");
         const result = streamText({
             model: groq("llama-3.1-8b-instant"),
             system: systemPrompt,
             messages: [{ role: "user", content: question }],
             onFinish: async (event) => {
+                console.log("Chat: Stream Finished, saving to DB...");
                 // Save AI Message when stream completes
                 try {
                     await (prisma as any).message.create({
@@ -169,6 +179,7 @@ export async function POST(req: Request) {
                 }
             },
         });
+        console.timeEnd("Chat: StreamStarting");
 
         return result.toTextStreamResponse();
 

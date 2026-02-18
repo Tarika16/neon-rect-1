@@ -4,11 +4,15 @@
 let extractor: any = null;
 
 // Function to get the pipeline
-// We use 'any' here as the Xenova types are complex to mock perfectly in this environment
 async function getPipeline() {
     if (!extractor) {
+        const { pipeline, env } = await import("@xenova/transformers");
+
+        // Vercel friendly configuration
+        env.allowLocalModels = false;
+        env.useBrowserCache = false;
+
         // Use a small, efficient model for embeddings
-        const { pipeline } = await import("@xenova/transformers");
         extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
     }
     return extractor;
