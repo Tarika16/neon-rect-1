@@ -105,6 +105,9 @@ export async function POST(req: Request) {
         });
 
         // 6. Streaming LLM Generation
+        const userId = session.user.id as string;
+        const wsId = workspaceId as string;
+
         const systemPrompt = `You are an expert research assistant.
         
         Goal: Answer the user's question using ONLY the provided context.
@@ -129,8 +132,8 @@ export async function POST(req: Request) {
                     data: {
                         role: "assistant",
                         content: event.text,
-                        workspaceId: workspaceId as string,
-                        userId: session.user.id as string,
+                        workspaceId: wsId,
+                        userId: userId,
                     },
                 });
             },
