@@ -137,6 +137,13 @@ export async function POST(req: Request) {
         2. If the context has both Internal Knowledge and Web Search Results, synthesize them.
         3. If the answer is NOT in the context, say "I cannot find the answer in the provided documents or web search."
         4. Be concise and professional.
+        5. CRITICAL: At the very end of your response, after any citations, provide exactly 3 suggested follow-up questions starting with "SUGGESTED_QUESTIONS:". Separate them with newlines. 
+           Example:
+           ... your answer ...
+           SUGGESTED_QUESTIONS:
+           What is the deadline for Phase 2?
+           Who is the lead project manager?
+           Is there a budget allocated?
         
         Context:
         ${contextText}
