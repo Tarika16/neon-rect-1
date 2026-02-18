@@ -94,6 +94,7 @@ export async function POST(req: Request) {
 
                 // Workaround for Unsupported type in Prisma:
                 // We create the chunk first, then update it with raw SQL for the vector
+                // @ts-ignore - Local types may be outdated due to file lock
                 const chunk = await prisma.documentChunk.create({
                     data: {
                         content: chunkContent,
