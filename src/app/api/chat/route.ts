@@ -99,8 +99,8 @@ export async function POST(req: Request) {
             data: {
                 role: "user",
                 content: question,
-                workspaceId,
-                userId: session.user.id,
+                workspaceId: workspaceId as string,
+                userId: session.user.id as string,
             },
         });
 
@@ -129,8 +129,8 @@ export async function POST(req: Request) {
                     data: {
                         role: "assistant",
                         content: event.text,
-                        workspaceId,
-                        userId: session.user.id,
+                        workspaceId: workspaceId as string,
+                        userId: session.user.id as string,
                     },
                 });
             },
