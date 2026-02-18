@@ -1,22 +1,26 @@
-import { NextResponse } from "next/server";
+import { streamText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { searchFirecrawl } from "@/lib/firecrawl";
-import Groq from "groq-sdk";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Configure Groq as an OpenAI-compatible provider
+const groq = createOpenAI({
+    baseURL: "https://api.groq.com/openai/v1",
+    apiKey: process.env.GROQ_API_KEY,
+});
 
 export async function POST(req: Request) {
     try {
         const session = await auth();
         if (!session?.user?.id) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return new Response("Unauthorized", { status: 401 });
         }
 
         const { workspaceId, question, includeWebSearch } = await req.json();
 
         if (!question || !workspaceId) {
-            return NextResponse.json({ error: "Missing question or workspaceId" }, { status: 400 });
+            return new Response("Missing question or workspaceId", { status: 400 });
         }
 
         console.log(`Chat: Processing question "${question}" for workspace ${workspaceId}`);
@@ -26,8 +30,6 @@ export async function POST(req: Request) {
         const queryEmbedding = await generateEmbedding(question);
 
         // 2. Vector Search (Semantic Retrieval)
-        // Find top 5 chunks most similar to query_embedding within the workspace
-        // We join DocumentChunk -> Document to filter by workspaceId
         const vectorResults: any[] = await prisma.$queryRaw`
             SELECT 
                 chunk.id,
@@ -43,11 +45,8 @@ export async function POST(req: Request) {
             LIMIT 5;
         `;
 
-        console.log(`Chat: Found ${vectorResults.length} relevant chunks`);
-
         // 3. Evaluate Retrieval Quality
         const topScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
-        console.log(`Chat: Top similarity score: ${topScore}`);
 
         let contextText = "";
         let sources: any[] = [];
@@ -56,9 +55,7 @@ export async function POST(req: Request) {
         if (vectorResults.length > 0) {
             contextText += "## Internal Knowledge:\n";
             vectorResults.forEach((chunk, index) => {
-                // Add to context
                 contextText += `[${index + 1}] Document: "${chunk.docTitle}"\nContent: ${chunk.content}\n\n`;
-                // Track source for frontend
                 sources.push({
                     id: index + 1,
                     type: "document",
@@ -69,14 +66,11 @@ export async function POST(req: Request) {
         }
 
         // 4. Hybrid Logic: Web Search Fallback
-        // Trigger if: 
-        // a) Explicitly requested (includeWebSearch = true)
-        // b) Poor vector match (score < 0.5) AND we have no good results
         const isPoorMatch = topScore < 0.5;
         const shouldSearchWeb = includeWebSearch || (isPoorMatch && vectorResults.length < 2);
 
         if (shouldSearchWeb) {
-            console.log("Chat: Triggering Web Search (Fallback/Requested)...");
+            console.log("Chat: Triggering Web Search...");
             try {
                 const webResults = await searchFirecrawl(question, 3);
                 if (webResults.length > 0) {
@@ -95,11 +89,22 @@ export async function POST(req: Request) {
                 }
             } catch (webError) {
                 console.error("Chat: Web Search Failed", webError);
-                // Continue without web results
             }
         }
 
-        // 5. LLM Generation
+        // 5. Streaming LLM Generation
+
+        // 5. Save User Message
+        await prisma.message.create({
+            data: {
+                role: "user",
+                content: question,
+                workspaceId,
+                userId: session.user.id,
+            },
+        });
+
+        // 6. Streaming LLM Generation
         const systemPrompt = `You are an expert research assistant.
         
         Goal: Answer the user's question using ONLY the provided context.
@@ -114,24 +119,27 @@ export async function POST(req: Request) {
         ${contextText}
         `;
 
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: question },
-            ],
-            model: "llama-3.1-8b-instant",
+        const result = streamText({
+            model: groq("llama-3.1-8b-instant"),
+            system: systemPrompt,
+            messages: [{ role: "user", content: question }],
+            onFinish: async (event) => {
+                // Save AI Message when stream completes
+                await prisma.message.create({
+                    data: {
+                        role: "assistant",
+                        content: event.text,
+                        workspaceId,
+                        userId: session.user.id,
+                    },
+                });
+            },
         });
 
-        const answer = completion.choices[0]?.message?.content || "No answer generated.";
-
-        return NextResponse.json({
-            answer,
-            sources,
-            isWebFallback: shouldSearchWeb
-        });
+        return result.toTextStreamResponse();
 
     } catch (error: any) {
         console.error("Chat Error:", error);
-        return NextResponse.json({ error: error.message || "Failed to generate answer" }, { status: 500 });
+        return new Response(error.message || "Failed to generate answer", { status: 500 });
     }
 }

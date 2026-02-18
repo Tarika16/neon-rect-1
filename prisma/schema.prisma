@@ -26,6 +26,7 @@ model User {
   updatedAt  DateTime @updatedAt
   documents  Document[]
   workspaces Workspace[]
+  messages   Message[]
 }
 
 model Workspace {
@@ -34,6 +35,7 @@ model Workspace {
   userId    String
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents Document[]
+  messages  Message[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 }
@@ -60,4 +62,17 @@ model DocumentChunk {
   createdAt  DateTime @default(now())
 
   @@index([documentId])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  role        String    // "user" | "assistant"
+  content     String    @db.Text
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
 }
