@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 export async function GET(
     req: Request,
-    { params }: { params: { id: string } }
+    element: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth();
@@ -12,9 +12,11 @@ export async function GET(
             return new NextResponse("Unauthorized", { status: 401 });
         }
 
+        const { id } = await element.params;
+
         const messages = await prisma.message.findMany({
             where: {
-                workspaceId: params.id,
+                workspaceId: id,
                 userId: session.user.id
             },
             orderBy: {
