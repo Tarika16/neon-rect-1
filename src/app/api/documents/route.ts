@@ -20,15 +20,15 @@ export async function POST(req: Request) {
 
         const formData = await req.formData();
         const file = formData.get("file") as File;
+        const workspaceId = formData.get("workspaceId") as string | null;
 
-        console.log("Upload: File received:", file?.name, "Type:", file?.type, "Size:", file?.size);
+        console.log("Upload: File:", file?.name, "Workspace:", workspaceId);
 
         if (!file) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
         if (file.type !== "application/pdf" && file.type !== "text/plain") {
-            // Relaxed check for debugging, but keeping it for now
             return NextResponse.json({ error: `Unsupported file type: ${file.type}` }, { status: 400 });
         }
 
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
             } catch (pdfError: any) {
                 console.error("Upload: PDF Parse Error", pdfError);
                 return NextResponse.json({
-                    error: `Failed to parse PDF: ${pdfError.message || "Unknown error"}. (Filename: ${file.name}, Type: ${file.type})`
+                    error: `Failed to parse PDF: ${pdfError.message || "Unknown error"}. (Filename: ${file.name})`
                 }, { status: 500 });
             }
         } else {
@@ -62,19 +62,19 @@ export async function POST(req: Request) {
         }
 
         // Save to DB
-        // @ts-ignore - Prisma client type might be lagging, but runtime is verified.
-        console.log("Upload: Saving to DB for user:", (session?.user as any).id);
+        // @ts-ignore
         const doc = await (prisma as any).document.create({
             data: {
                 title: file.name,
                 content: content,
                 userId: (session?.user as any).id,
+                workspaceId: workspaceId || null,
             },
         });
 
         console.log("Upload: DB Saved:", doc.id);
 
-        return NextResponse.json({ id: doc.id, title: doc.title });
+        return NextResponse.json({ id: doc.id, title: doc.title, workspaceId: doc.workspaceId });
 
     } catch (error: any) {
         console.error("Upload Error:", error);
@@ -89,11 +89,19 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const { searchParams } = new URL(req.url);
+        const workspaceId = searchParams.get("workspaceId");
+
+        const whereClause: any = { userId: (session?.user as any).id };
+        if (workspaceId) {
+            whereClause.workspaceId = workspaceId;
+        }
+
         // @ts-ignore
         const docs = await (prisma as any).document.findMany({
-            where: { userId: (session?.user as any).id },
+            where: whereClause,
             orderBy: { createdAt: "desc" },
-            select: { id: true, title: true, createdAt: true } // Don't return full content list to save bandwidth
+            select: { id: true, title: true, createdAt: true, workspaceId: true }
         });
 
         return NextResponse.json(docs);

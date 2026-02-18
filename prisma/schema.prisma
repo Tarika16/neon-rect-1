@@ -23,13 +23,26 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   documents  Document[]
+  workspaces Workspace[]
+}
+
+model Workspace {
+  id        String     @id @default(cuid())
+  name      String
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents Document[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model Document {
-  id        String   @id @default(cuid())
-  title     String
-  content   String   @db.Text
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id          String     @id @default(cuid())
+  title       String
+  content     String     @db.Text
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
 }
