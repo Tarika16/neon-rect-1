@@ -291,16 +291,21 @@ export default function WorkspaceDetailPage() {
             const decoder = new TextDecoder();
             let accumulatedContent = "";
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                const text = decoder.decode(value, { stream: true });
-                accumulatedContent += text;
+                    const text = decoder.decode(value, { stream: true });
+                    accumulatedContent += text;
 
-                setMessages(prev => prev.map(m =>
-                    m.id === aiMessageId ? { ...m, content: accumulatedContent } : m
-                ));
+                    setMessages(prev => prev.map(m =>
+                        m.id === aiMessageId ? { ...m, content: accumulatedContent } : m
+                    ));
+                }
+            } catch (streamError: any) {
+                console.error("Stream reader error:", streamError);
+                throw new Error(`Connection lost during response: ${streamError.message || "Timeout or Interruption"}`);
             }
 
             // Parse suggested questions from the final content
@@ -308,7 +313,7 @@ export default function WorkspaceDetailPage() {
                 const parts = accumulatedContent.split("SUGGESTED_QUESTIONS:");
                 const mainContent = parts[0].trim();
                 const questionsSection = parts[1].trim();
-                const questions = questionsSection.split("\n").map(q => q.trim().replace(/^[0-9.-]+\s*/, "")).filter(q => q.length > 0);
+                const questions = questionsSection.split("\n").map(q => q.trim().replace(/^[0-9.-]+\s*/, "")).filter(q => q.length > 0).slice(0, 3);
 
                 // Update message to hide the raw text and store questions somewhere?
                 // Actually, let's just keep the state simple.
@@ -318,8 +323,12 @@ export default function WorkspaceDetailPage() {
             }
         } catch (error: any) {
             console.error("Chat error:", error);
-            const msg = error.message || "Something went wrong";
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: "assistant", content: `Sorry, there was an error: ${msg}. Please try again.` }]);
+            const msg = error.message || "An unidentified error occurred.";
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: "assistant",
+                content: `Error: ${msg}. If this persists, try refreshing or use a shorter question.`
+            }]);
         } finally {
             setIsLoading(false);
         }
