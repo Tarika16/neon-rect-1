@@ -131,6 +131,18 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const workspaceId = searchParams.get("workspaceId");
+        const docId = searchParams.get("id");
+
+        if (docId) {
+            // @ts-ignore
+            const doc = await prisma.document.findUnique({
+                where: {
+                    id: docId,
+                    userId: (session?.user as any).id
+                }
+            });
+            return NextResponse.json(doc);
+        }
 
         const whereClause: any = { userId: (session?.user as any).id };
         if (workspaceId) {
