@@ -36,9 +36,9 @@ export async function POST(req: Request) {
         try {
             queryEmbedding = await generateEmbedding(question);
             console.timeEnd("Chat: Embedding");
-        } catch (embedError) {
+        } catch (embedError: any) {
             console.error("Chat: Embedding generation failed:", embedError);
-            throw new Error("Failed to process question context.");
+            throw new Error(`Failed to process question context: ${embedError.message}`);
         }
 
         // 2. Vector Search (Semantic Retrieval)

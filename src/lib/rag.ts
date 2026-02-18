@@ -24,9 +24,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         const output = await pipe(text, { pooling: "mean", normalize: true });
         // Convert Float32Array to regular array
         return Array.from(output.data);
-    } catch (error) {
-        console.error("Embedding Error", error);
-        throw new Error("Failed to generate embedding");
+    } catch (error: any) {
+        console.error("Embedding Error:", error);
+        throw error; // Throw original error to see actual cause
     }
 }
 
