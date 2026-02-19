@@ -505,7 +505,7 @@ export default function WorkspaceDetailPage() {
                                             )}
                                             <button
                                                 onClick={(e) => handleDeleteDocument(e, doc.id)}
-                                                className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 opacity-60 group-hover:opacity-100 transition-all"
                                                 title="Delete document"
                                             >
                                                 <Trash2 size={14} />

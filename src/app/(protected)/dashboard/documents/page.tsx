@@ -223,7 +223,7 @@ export default function DocumentsPage() {
                                 </div>
                                 <button
                                     onClick={(e) => handleDeleteDocument(doc.id, e)}
-                                    className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10"
+                                    className="opacity-60 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10"
                                     title="Delete Document"
                                 >
                                     <Trash2 size={14} />
