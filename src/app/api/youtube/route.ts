@@ -99,10 +99,46 @@ Be thorough and helpful. Format everything in clean Markdown.`,
             });
         }
 
+        // Handle manual transcript input
+        const body = await req.json().catch(() => ({}));
+        const { url, manualTranscript, title: manualTitle } = body;
+
+        if (manualTranscript) {
+            const transcript = manualTranscript;
+            const title = manualTitle || "Pasted Transcript";
+
+            // Plain text for LLM
+            const llmTranscript = transcript.length > 80000
+                ? transcript.slice(0, 80000) + "\n\n[Transcript truncated due to length]"
+                : transcript;
+
+            // Generate Summary
+            const { text: summary } = await generateText({
+                model: groq("llama-3.3-70b-versatile"),
+                system: "You are an expert at summarizing educational content. Provide clear, concise summaries in Markdown format.",
+                prompt: `Summarize this content titled "${title}":\n\n${llmTranscript}\n\nProvide a comprehensive summary covering:\n- Main topic and purpose\n- Key points discussed\n- Important conclusions or takeaways\n\nKeep it clear and well-organized with Markdown formatting.`,
+            });
+
+            // Generate Study Notes
+            const { text: studyNotes } = await generateText({
+                model: groq("llama-3.3-70b-versatile"),
+                system: "You are an expert at creating study notes from educational content. Create clean, structured notes optimized for learning and revision.",
+                prompt: `Create detailed study notes from this content titled "${title}":\n\n${llmTranscript}\n\nFormat the notes with:\n- Clear headings for each topic/section\n- Bullet points for key facts and concepts\n- Important definitions highlighted in **bold**\n- Any formulas, steps, or processes in numbered lists\n- A "Key Takeaways" section at the end\n\nMake the notes comprehensive enough for exam preparation.`,
+            });
+
+            return NextResponse.json({
+                title,
+                videoId: null,
+                source: "manual",
+                transcript: transcript, // In manual mode, the transcript is what they pasted
+                summary,
+                studyNotes,
+            });
+        }
+
         // Handle YouTube URL
-        const { url } = await req.json();
         if (!url) {
-            return NextResponse.json({ error: "Please provide a YouTube URL" }, { status: 400 });
+            return NextResponse.json({ error: "Please provide a YouTube URL or a manual transcript" }, { status: 400 });
         }
 
         const videoId = extractVideoId(url);

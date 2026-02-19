@@ -3,24 +3,30 @@
 import { useState, useRef } from "react";
 import {
     Youtube, Send, Loader2, FileText, BookOpen, ScrollText,
-    Copy, Download, Check, Upload, ImageIcon, AlertCircle, X
+    Copy, Download, Check, Upload, ImageIcon, AlertCircle, X,
+    Type, Link as LinkIcon
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type Tab = "summary" | "notes" | "transcript";
+type InputMode = "youtube" | "manual";
 
 interface Result {
     title: string;
     videoId: string | null;
-    source: "youtube" | "screenshot";
+    source: "youtube" | "screenshot" | "manual";
     summary: string;
     studyNotes: string;
     transcript: string;
 }
 
 export default function YouTubeAIPage() {
+    const [inputMode, setInputMode] = useState<InputMode>("youtube");
     const [url, setUrl] = useState("");
+    const [manualTranscript, setManualTranscript] = useState("");
+    const [manualTitle, setManualTitle] = useState("");
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [result, setResult] = useState<Result | null>(null);
@@ -32,17 +38,24 @@ export default function YouTubeAIPage() {
 
     const handleAnalyze = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!url.trim() || loading) return;
+
+        if (inputMode === "youtube" && !url.trim()) return;
+        if (inputMode === "manual" && !manualTranscript.trim()) return;
+        if (loading) return;
 
         setLoading(true);
         setError("");
         setResult(null);
 
         try {
+            const payload = inputMode === "youtube"
+                ? { url }
+                : { manualTranscript, title: manualTitle };
+
             const res = await fetch("/api/youtube", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify(payload),
             });
 
             const data = await res.json();
@@ -52,7 +65,7 @@ export default function YouTubeAIPage() {
                     setError(data.error);
                     setShowScreenshotUpload(true);
                 } else {
-                    setError(data.error || "Failed to process video");
+                    setError(data.error || "Failed to process input");
                 }
                 return;
             }
@@ -159,98 +172,168 @@ export default function YouTubeAIPage() {
                     <Youtube className="text-red-500" />
                     YouTube AI
                 </h1>
-                <p className="text-gray-400 text-sm">Paste a YouTube link to generate summaries, study notes, and transcripts</p>
+                <p className="text-gray-400 text-sm">Analyze YouTube videos or paste transcripts to generate study materials</p>
             </div>
 
-            {/* URL Input */}
-            <form onSubmit={handleAnalyze} className="glass-card p-5">
-                <div className="flex gap-3">
-                    <div className="relative flex-1">
-                        <input
-                            className="input-field w-full py-3 pl-12 pr-4 text-base"
-                            placeholder="Paste YouTube URL here... (e.g. https://youtube.com/watch?v=...)"
-                            value={url}
-                            onChange={(e) => { setUrl(e.target.value); setError(""); setShowScreenshotUpload(false); }}
-                            disabled={loading}
-                        />
-                        <Youtube className="absolute left-4 top-1/2 -translate-y-1/2 text-red-400/60" size={20} />
-                    </div>
+            {/* Input Options Card */}
+            <div className="glass-card overflow-hidden">
+                {/* Mode Selector */}
+                <div className="flex border-b border-white/10 bg-white/[0.02]">
                     <button
-                        type="submit"
-                        className="btn btn-primary px-7 flex items-center gap-2 text-base font-semibold transition-transform active:scale-95"
-                        disabled={loading || !url.trim()}
+                        onClick={() => { setInputMode("youtube"); setError(""); }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${inputMode === "youtube"
+                                ? "text-red-400 bg-red-500/5 border-b-2 border-red-500"
+                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            }`}
                     >
-                        {loading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-                        Analyze
+                        <LinkIcon size={16} />
+                        YouTube URL
+                    </button>
+                    <button
+                        onClick={() => { setInputMode("manual"); setError(""); }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${inputMode === "manual"
+                                ? "text-purple-400 bg-purple-500/5 border-b-2 border-purple-500"
+                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            }`}
+                    >
+                        <Type size={16} />
+                        Paste Transcript
+                    </button>
+                    <button
+                        onClick={() => setShowScreenshotUpload(!showScreenshotUpload)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${showScreenshotUpload
+                                ? "text-amber-400 bg-amber-500/5 border-b-2 border-amber-500"
+                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            }`}
+                    >
+                        <ImageIcon size={16} />
+                        Screenshot
                     </button>
                 </div>
 
-                {/* Error Message */}
-                {error && (
-                    <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2 text-red-400 text-sm">
-                        <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                        <span>{error}</span>
-                    </div>
-                )}
-
-                {/* Screenshot Fallback */}
-                {showScreenshotUpload && (
-                    <div className="mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm text-gray-400 font-medium">📸 Upload a screenshot instead:</p>
-                            <button onClick={() => setShowScreenshotUpload(false)} className="text-gray-500 hover:text-white">
-                                <X size={16} />
+                <div className="p-5">
+                    {/* YouTube URL Mode */}
+                    {inputMode === "youtube" && !showScreenshotUpload && (
+                        <form onSubmit={handleAnalyze} className="flex gap-3">
+                            <div className="relative flex-1">
+                                <input
+                                    className="input-field w-full py-3 pl-12 pr-4 text-base"
+                                    placeholder="Paste YouTube URL here... (e.g. https://youtube.com/watch?v=...)"
+                                    value={url}
+                                    onChange={(e) => { setUrl(e.target.value); setError(""); }}
+                                    disabled={loading}
+                                />
+                                <Youtube className="absolute left-4 top-1/2 -translate-y-1/2 text-red-400/60" size={20} />
+                            </div>
+                            <button
+                                type="submit"
+                                className="btn btn-primary px-7 flex items-center gap-2 text-base font-semibold transition-transform active:scale-95"
+                                disabled={loading || !url.trim()}
+                            >
+                                {loading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+                                Analyze
                             </button>
+                        </form>
+                    )}
+
+                    {/* Manual Transcript Mode */}
+                    {inputMode === "manual" && !showScreenshotUpload && (
+                        <form onSubmit={handleAnalyze} className="space-y-4">
+                            <div className="flex gap-3">
+                                <input
+                                    className="input-field flex-1 py-3 px-4"
+                                    placeholder="Topic/Title (optional)"
+                                    value={manualTitle}
+                                    onChange={(e) => setManualTitle(e.target.value)}
+                                    disabled={loading}
+                                />
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary px-7 flex items-center gap-2 font-semibold transition-transform active:scale-95 whitespace-nowrap"
+                                    disabled={loading || !manualTranscript.trim()}
+                                >
+                                    {loading ? <Loader2 className="animate-spin" size={18} /> : <BookOpen size={18} />}
+                                    Generate Notes
+                                </button>
+                            </div>
+                            <textarea
+                                className="input-field w-full h-32 p-4 resize-none"
+                                placeholder="Paste the transcript or text content here..."
+                                value={manualTranscript}
+                                onChange={(e) => { setManualTranscript(e.target.value); setError(""); }}
+                                disabled={loading}
+                            />
+                        </form>
+                    )}
+
+                    {/* Screenshot Upload Fallback */}
+                    {showScreenshotUpload && (
+                        <div className="animate-fade-in">
+                            <div
+                                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                                onDragLeave={() => setDragOver(false)}
+                                onDrop={handleDrop}
+                                onClick={() => fileRef.current?.click()}
+                                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragOver
+                                        ? "border-amber-500 bg-amber-500/10"
+                                        : "border-white/10 hover:border-white/20 hover:bg-white/5"
+                                    }`}
+                            >
+                                <ImageIcon size={32} className="mx-auto mb-3 text-gray-500" />
+                                <p className="text-gray-400 text-sm">
+                                    Drag &amp; drop a screenshot of educational content here, or <span className="text-amber-400 font-semibold">click to browse</span>
+                                </p>
+                                <p className="text-gray-500 text-xs mt-1">PNG, JPG, WebP — up to 50MB</p>
+                            </div>
+                            <input
+                                ref={fileRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleFileChange}
+                            />
                         </div>
-                        <div
-                            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                            onDragLeave={() => setDragOver(false)}
-                            onDrop={handleDrop}
-                            onClick={() => fileRef.current?.click()}
-                            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragOver
-                                    ? "border-purple-500 bg-purple-500/10"
-                                    : "border-white/10 hover:border-white/20 hover:bg-white/5"
-                                }`}
-                        >
-                            <ImageIcon size={32} className="mx-auto mb-3 text-gray-500" />
-                            <p className="text-gray-400 text-sm">
-                                Drag &amp; drop a screenshot here, or <span className="text-purple-400 font-semibold">click to browse</span>
-                            </p>
-                            <p className="text-gray-500 text-xs mt-1">PNG, JPG, WebP — up to 50MB</p>
+                    )}
+
+                    {/* Error Message */}
+                    {error && (
+                        <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-2 text-red-400 text-sm">
+                            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                            <span>{error}</span>
                         </div>
-                        <input
-                            ref={fileRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleFileChange}
-                        />
-                    </div>
-                )}
-            </form>
+                    )}
+                </div>
+            </div>
 
             {/* Loading State */}
             {loading && (
                 <div className="glass-card flex-1 flex flex-col items-center justify-center gap-4">
                     <div className="relative">
-                        <div className="w-16 h-16 rounded-full border-4 border-purple-500/20 border-t-purple-500 animate-spin" />
-                        <Youtube className="absolute inset-0 m-auto text-red-400" size={24} />
+                        <div className={`w-16 h-16 rounded-full border-4 border-t-transparent animate-spin ${inputMode === "youtube" ? "border-red-500" : "border-purple-500"
+                            }`} />
+                        {inputMode === "youtube" ? (
+                            <Youtube className="absolute inset-0 m-auto text-red-400" size={24} />
+                        ) : (
+                            <Type className="absolute inset-0 m-auto text-purple-400" size={24} />
+                        )}
                     </div>
                     <div className="text-center">
-                        <p className="text-white font-semibold text-lg">Analyzing Video...</p>
-                        <p className="text-gray-400 text-sm mt-1">Extracting transcript and generating notes</p>
+                        <p className="text-white font-semibold text-lg">Processing Content...</p>
+                        <p className="text-gray-400 text-sm mt-1">
+                            {inputMode === "youtube" ? "Extracting transcript and generating notes" : "Analyzing text and generating study material"}
+                        </p>
                     </div>
                 </div>
             )}
 
             {/* Results */}
             {result && !loading && (
-                <div className="glass-card flex-1 flex flex-col overflow-hidden">
-                    {/* Video Title + Embed */}
+                <div className="glass-card flex-1 flex flex-col overflow-hidden animate-slide-up">
+                    {/* Header Details */}
                     <div className="p-4 border-b border-white/10 bg-white/5">
                         <div className="flex items-start gap-4">
                             {result.videoId && (
-                                <div className="w-40 h-24 rounded-lg overflow-hidden shrink-0 bg-black/50">
+                                <div className="w-40 h-24 rounded-lg overflow-hidden shrink-0 bg-black/50 shadow-lg">
                                     <img
                                         src={`https://img.youtube.com/vi/${result.videoId}/mqdefault.jpg`}
                                         alt={result.title}
@@ -261,11 +344,13 @@ export default function YouTubeAIPage() {
                             <div className="flex-1 min-w-0">
                                 <h2 className="text-lg font-bold text-white truncate">{result.title}</h2>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${result.source === "youtube"
-                                            ? "bg-red-500/15 text-red-400 border border-red-500/20"
-                                            : "bg-purple-500/15 text-purple-400 border border-purple-500/20"
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${result.source === "youtube"
+                                            ? "bg-red-500/15 text-red-400 border-red-500/20"
+                                            : result.source === "manual"
+                                                ? "bg-purple-500/15 text-purple-400 border-purple-500/20"
+                                                : "bg-amber-500/15 text-amber-400 border-amber-500/20"
                                         }`}>
-                                        {result.source === "youtube" ? "YouTube" : "Screenshot"}
+                                        {result.source === "youtube" ? "YouTube Video" : result.source === "manual" ? "Pasted Text" : "Screenshot Analysis"}
                                     </span>
                                 </div>
                             </div>
@@ -291,14 +376,14 @@ export default function YouTubeAIPage() {
                         <div className="ml-auto flex items-center gap-2 pr-3">
                             <button
                                 onClick={handleCopy}
-                                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+                                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
                                 title="Copy to clipboard"
                             >
                                 {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
                             </button>
                             <button
                                 onClick={handleDownload}
-                                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+                                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10"
                                 title="Download as Markdown"
                             >
                                 <Download size={16} />
@@ -323,9 +408,9 @@ export default function YouTubeAIPage() {
                     <div className="p-6 bg-red-500/10 rounded-full border border-red-500/20 mb-5">
                         <Youtube size={56} className="text-red-400/70" />
                     </div>
-                    <h3 className="text-xl font-bold text-white mb-2">Paste a YouTube Link</h3>
+                    <h3 className="text-xl font-bold text-white mb-2">Transform Content into Knowledge</h3>
                     <p className="text-gray-400 text-sm max-w-md">
-                        The AI will extract the transcript, generate a summary, and create structured study notes for you.
+                        The AI will analyze your content, generate a summary, and create structured study notes for you.
                     </p>
                     <div className="flex gap-3 mt-5 text-xs">
                         <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
