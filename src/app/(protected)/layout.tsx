@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, Users, Shield, LogOut, FileText, Layers, Globe } from "lucide-react";
+import { LayoutDashboard, Users, Shield, LogOut, FileText, Layers, Globe, Youtube } from "lucide-react";
 import { SignOutButton } from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +49,10 @@ export default async function DashboardLayout({
                     <Link href="/dashboard/deep-search" className="sidebar-link">
                         <Globe size={18} />
                         Deep Search
+                    </Link>
+                    <Link href="/dashboard/youtube-ai" className="sidebar-link">
+                        <Youtube size={18} />
+                        YouTube AI
                     </Link>
                 </nav>
 
