@@ -27,7 +27,7 @@ export default function DocumentsPage() {
     const endRef = useRef<HTMLDivElement>(null);
 
     // EMERGENCY: Version Detection
-    const CURRENT_VERSION = "v2.0.0-FIXED";
+    const CURRENT_VERSION = "v2.1.0-SUPER-REPAIRED";
 
     useEffect(() => {
         fetchDocuments();
@@ -118,12 +118,13 @@ export default function DocumentsPage() {
         setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
-            { role: "ai", content: "" }
+            { role: "ai", content: "🔍 AI is thinking (searching documents)..." }
         ]);
 
         setLoading(true);
 
         try {
+            console.log("Chat: Requesting answer for", selectedDoc.id);
             const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -132,16 +133,22 @@ export default function DocumentsPage() {
 
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.error || `Server error: ${res.status}`);
+                throw new Error(errorData.error || `Server Error: ${res.status}`);
             }
 
-            if (!res.body) throw new Error("No response body received from AI.");
+            if (!res.body) throw new Error("Critical: No response from AI server.");
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let accumulatedContent = "";
 
             try {
+                // Remove the "thinking" message before streaming
+                setMessages(prev => {
+                    const filtered = prev.filter(m => m.content !== "🔍 AI is thinking (searching documents)...");
+                    return [...filtered, { role: "ai", content: "" }];
+                });
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
@@ -160,18 +167,14 @@ export default function DocumentsPage() {
                 }
             } catch (streamError: any) {
                 console.error("Stream read error:", streamError);
-                throw new Error(`Connection interrupted: ${streamError.message}`);
+                throw new Error(`Connection Lost: ${streamError.message}`);
             }
 
         } catch (error: any) {
-            console.error("Chat Error:", error);
+            console.error("Chat Flow Error:", error);
             setMessages((prev) => {
-                const newMsgs = [...prev];
-                const lastMsg = newMsgs[newMsgs.length - 1];
-                if (lastMsg && lastMsg.role === "ai") {
-                    return [...newMsgs.slice(0, -1), { role: "ai", content: `⚠️ Error: ${error.message}` }];
-                }
-                return [...newMsgs, { role: "ai", content: `⚠️ Error: ${error.message}` }];
+                const filtered = prev.filter(m => m.content !== "🔍 AI is thinking (searching documents)...");
+                return [...filtered, { role: "ai", content: `❌ ERROR: ${error.message}. Please refresh the page (Ctrl+F5).` }];
             });
         } finally {
             setLoading(false);
@@ -181,9 +184,9 @@ export default function DocumentsPage() {
     return (
         <div className="flex flex-col h-[calc(100vh-6rem)]">
             {/* FORCE REFRESH BANNER IF OLD */}
-            <div className="bg-red-600 text-white text-[10px] font-bold py-1 px-4 flex justify-between items-center uppercase tracking-widest animate-pulse">
-                <span>🔴 DELETE FEATURE ACTIVE - VERSION 2.0.0</span>
-                <span>IF YOU DO NOT SEE RED BUTTONS, PRESS CTRL+F5</span>
+            <div className="bg-yellow-400 text-black text-[12px] font-black py-2 px-4 flex justify-between items-center uppercase tracking-widest border-b-2 border-black">
+                <span className="flex items-center gap-2">⚠️ RAG REPAIRED - VERSION 2.1.0-TS</span>
+                <span>IF YOU DO NOT SEE THIS YELLOW BAR, PRESS CTRL+F5 REPEATEDLY</span>
             </div>
 
             <div className="flex flex-1 gap-6 overflow-hidden mt-4">

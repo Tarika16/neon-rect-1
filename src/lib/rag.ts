@@ -6,48 +6,79 @@ let extractor: any = null;
 // Function to get the pipeline
 // Function to get the pipeline
 async function getPipeline() {
-    if (!extractor) {
-        try {
-            const { pipeline, env } = await import("@xenova/transformers");
+    if (extractor) return extractor;
 
-            // Vercel friendly configuration
-            env.allowLocalModels = false;
-            env.useBrowserCache = false;
-            env.cacheDir = "/tmp";
+    try {
+        console.log("RAG: Initializing Xenova pipeline...");
+        const { pipeline, env } = await import("@xenova/transformers");
 
-            // Force WASM backend
-            // @ts-ignore
-            env.backends.onnx.wasm.numThreads = 1;
+        // Vercel friendly configuration
+        env.allowLocalModels = false;
+        env.useBrowserCache = false;
 
-            extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-        } catch (e) {
-            console.warn("Xenova local model failed to load, will attempt OpenAI fallback if configured.", e);
-            return null;
-        }
+        // Use a persistent cache if possible, but for Vercel /tmp is best
+        env.cacheDir = "/tmp";
+
+        // Performance optimizations
+        // @ts-ignore
+        env.backends.onnx.wasm.numThreads = 1;
+        // @ts-ignore
+        env.backends.onnx.wasm.proxy = false;
+
+        extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+        console.log("RAG: Xenova pipeline initialized successfully.");
+        return extractor;
+    } catch (e: any) {
+        console.error("RAG: Xenova model failed to load:", e.message);
+        throw e;
     }
-    return extractor;
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-    // CRITICAL: We MUST use the 384-dimensional model to match the DB schema 'vector(384)'.
-    // OpenAI's text-embedding-3-small is 1536-dim and will cause silent failures.
+    const apiKey = process.env.OPENAI_API_KEY;
 
-    // Priority 1: Local Xenova (MiniLM-L6-v2 is 384-dim)
+    if (apiKey) {
+        try {
+            const isOpenRouter = apiKey.startsWith("sk-or-");
+            const baseUrl = isOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1";
+            const model = isOpenRouter ? "openai/text-embedding-3-small" : "text-embedding-3-small";
+
+            const response = await fetch(`${baseUrl}/embeddings`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`,
+                    ...(isOpenRouter && { "HTTP-Referer": "https://neon-admin-dashboard.vercel.app", "X-Title": "NeonBoard" })
+                },
+                body: JSON.stringify({
+                    input: text.slice(0, 8000),
+                    model: model,
+                    dimensions: 384 // <--- ESSENTIAL FOR DB COMPATIBILITY
+                })
+            });
+
+            const result = await response.json();
+            if (result.data?.[0]?.embedding) {
+                return result.data[0].embedding;
+            }
+            console.error("RAG: OpenAI API returned error:", result);
+        } catch (apiError: any) {
+            console.error("RAG: OpenAI API call failed:", apiError.message);
+        }
+    }
+
+    // Fallback to local Xenova (384-dim)
     try {
         const pipe = await getPipeline();
         if (pipe) {
             const output = await pipe(text, { pooling: "mean", normalize: true });
             return Array.from(output.data);
         }
-    } catch (error: any) {
-        console.warn("Xenova embedding failed, falling back to API if available:", error.message);
+    } catch (e: any) {
+        console.error("RAG: Xenova fallback also failed:", e.message);
     }
 
-    // Priority 2: OpenAI Fallback (ONLY if forced or Xenova fails, but must be compatible)
-    // NOTE: This usually won't match 384-dim unless using a specific model/truncate.
-    // For now, we prefer erroring or Xenova to prevent DB corruption.
-
-    throw new Error("No embedding engine available or dimension mismatch (Xenova failed and OpenAI is 1536-dim)");
+    throw new Error("No embedding engine available (OpenAI failed and Xenova failed)");
 }
 
 export function chunkText(text: string, chunkSize: number = 500, overlap: number = 50): string[] {
