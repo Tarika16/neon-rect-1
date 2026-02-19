@@ -29,48 +29,25 @@ async function getPipeline() {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-    // Priority 1: OpenAI/OpenRouter Embedding (Fastest & most reliable on Vercel)
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey) {
-        try {
-            const isOpenRouter = apiKey.startsWith("sk-or-");
-            const baseUrl = isOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1";
-            const model = isOpenRouter ? "openai/text-embedding-3-small" : "text-embedding-3-small";
+    // CRITICAL: We MUST use the 384-dimensional model to match the DB schema 'vector(384)'.
+    // OpenAI's text-embedding-3-small is 1536-dim and will cause silent failures.
 
-            const response = await fetch(`${baseUrl}/embeddings`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`,
-                    ...(isOpenRouter && { "HTTP-Referer": "https://neon-admin-dashboard.vercel.app", "X-Title": "NeonBoard" })
-                },
-                body: JSON.stringify({
-                    input: text,
-                    model: model
-                })
-            });
-            const result = await response.json();
-            if (result.data?.[0]?.embedding) {
-                return result.data[0].embedding;
-            }
-            console.error("OpenAI Embedding Error:", result);
-        } catch (apiError) {
-            console.error("OpenAI API call failed:", apiError);
-        }
-    }
-
-    // Priority 2: Local Xenova (Fallback)
+    // Priority 1: Local Xenova (MiniLM-L6-v2 is 384-dim)
     try {
         const pipe = await getPipeline();
         if (pipe) {
             const output = await pipe(text, { pooling: "mean", normalize: true });
             return Array.from(output.data);
         }
-        throw new Error("No embedding engine available (OpenAI key missing and Xenova failed)");
     } catch (error: any) {
-        console.error("Embedding core failure:", error);
-        throw error;
+        console.warn("Xenova embedding failed, falling back to API if available:", error.message);
     }
+
+    // Priority 2: OpenAI Fallback (ONLY if forced or Xenova fails, but must be compatible)
+    // NOTE: This usually won't match 384-dim unless using a specific model/truncate.
+    // For now, we prefer erroring or Xenova to prevent DB corruption.
+
+    throw new Error("No embedding engine available or dimension mismatch (Xenova failed and OpenAI is 1536-dim)");
 }
 
 export function chunkText(text: string, chunkSize: number = 500, overlap: number = 50): string[] {
