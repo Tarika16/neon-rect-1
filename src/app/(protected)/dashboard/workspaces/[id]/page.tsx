@@ -21,6 +21,7 @@ interface Message {
     role: "user" | "assistant";
     content: string;
     suggestions?: string[];
+    sources?: any[]; // For citation mapping
 }
 
 interface Analytics {
@@ -31,6 +32,8 @@ interface Analytics {
 }
 
 export default function WorkspaceDetailPage() {
+    const [selectedSource, setSelectedSource] = useState<any | null>(null);
+    const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
     const params = useParams();
     const router = useRouter();
     const workspaceId = params.id as string;
@@ -302,38 +305,47 @@ export default function WorkspaceDetailPage() {
                     const text = decoder.decode(value, { stream: true });
                     accumulatedContent += text;
 
+                    let parsedSources = [];
+                    let cleanContent = accumulatedContent;
+
+                    if (accumulatedContent.includes("__SOURCES_METADATA__")) {
+                        const parts = accumulatedContent.split("__SOURCES_METADATA__");
+                        cleanContent = parts[0].trim();
+                        try {
+                            parsedSources = JSON.parse(parts[1].trim());
+                        } catch (e) {
+                            console.error("Failed to parse sources", e);
+                        }
+                    }
+
+                    // Parse suggested questions
+                    let finalContent = cleanContent;
+                    let questions: string[] = [];
+
+                    if (cleanContent.includes("SUGGESTED_QUESTIONS:")) {
+                        const parts = cleanContent.split("SUGGESTED_QUESTIONS:");
+                        finalContent = parts[0].trim();
+                        const questionsSection = parts[1].trim();
+                        questions = questionsSection.split("\n").map(q => q.trim().replace(/^[0-9.-]+\s*/, "")).filter(q => q.length > 0).slice(0, 3);
+                    }
+
                     setMessages(prev => prev.map(m =>
-                        m.id === aiMessageId ? { ...m, content: accumulatedContent } : m
+                        m.id === aiMessageId ? { ...m, content: finalContent, suggestions: questions, sources: parsedSources } : m
                     ));
                 }
             } catch (streamError: any) {
                 console.error("Stream reader error:", streamError);
                 throw new Error(`Connection lost during response: ${streamError.message || "Timeout or Interruption"}`);
             }
-
-            // Parse suggested questions from the final content
-            if (accumulatedContent.includes("SUGGESTED_QUESTIONS:")) {
-                const parts = accumulatedContent.split("SUGGESTED_QUESTIONS:");
-                const mainContent = parts[0].trim();
-                const questionsSection = parts[1].trim();
-                const questions = questionsSection.split("\n").map(q => q.trim().replace(/^[0-9.-]+\s*/, "")).filter(q => q.length > 0).slice(0, 3);
-
-                // Update message to hide the raw text and store questions somewhere?
-                // Actually, let's just keep the state simple.
-                setMessages(prev => prev.map(m =>
-                    m.id === aiMessageId ? { ...m, content: mainContent, suggestions: questions } : m
-                ));
-            }
         } catch (error: any) {
             console.error("Chat error details:", error);
             const msg = error.message || "An unidentified error occurred.";
             setMessages(prev => {
-                // Remove the empty AI message we added right before the failure
                 const filtered = prev.filter(m => !(m.role === "assistant" && m.content === ""));
                 return [...filtered, {
                     id: Date.now().toString(),
                     role: "assistant",
-                    content: `Error: ${msg}. If this keeps happening, try a shorter question or check your connection.`
+                    content: `Error: ${msg}. Try a shorter question or check your connection.`
                 }];
             });
         } finally {
@@ -709,7 +721,39 @@ export default function WorkspaceDetailPage() {
                                                                 </code>
                                                             );
                                                         },
-                                                        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed font-normal">{children}</p>,
+                                                        p: ({ children }) => {
+                                                            // Custom rendering for citations [1]
+                                                            if (typeof children === "string") {
+                                                                const parts = children.split(/(\[\d+\])/g);
+                                                                return (
+                                                                    <p className="mb-2 last:mb-0 leading-relaxed font-normal">
+                                                                        {parts.map((part, idx) => {
+                                                                            const match = part.match(/\[(\d+)\]/);
+                                                                            if (match) {
+                                                                                const sourceId = parseInt(match[1]);
+                                                                                const source = m.sources?.find(s => s.id === sourceId);
+                                                                                return (
+                                                                                    <button
+                                                                                        key={idx}
+                                                                                        onClick={() => {
+                                                                                            if (source) {
+                                                                                                setSelectedSource(source);
+                                                                                                setIsSourcePanelOpen(true);
+                                                                                            }
+                                                                                        }}
+                                                                                        className="mx-0.5 px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/40 text-[10px] font-bold text-purple-300 hover:bg-purple-500 hover:text-white transition-all transform hover:scale-110 active:scale-95"
+                                                                                    >
+                                                                                        {part}
+                                                                                    </button>
+                                                                                );
+                                                                            }
+                                                                            return part;
+                                                                        })}
+                                                                    </p>
+                                                                );
+                                                            }
+                                                            return <p className="mb-2 last:mb-0 leading-relaxed font-normal">{children}</p>;
+                                                        },
                                                         ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
                                                         ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
                                                     }}
@@ -778,6 +822,57 @@ export default function WorkspaceDetailPage() {
                     </div>
                 </div>
             </div>
+            {/* Source Details Panel (Slide-over) */}
+            {isSourcePanelOpen && selectedSource && (
+                <div className="absolute inset-y-0 right-0 w-[400px] bg-[#0c0c0e] border-l border-white/10 shadow-2xl z-50 animate-slide-left flex flex-col">
+                    <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            {selectedSource.type === "document" ? <FileText className="text-purple-400" size={18} /> : <Globe className="text-blue-400" size={18} />}
+                            <h3 className="font-bold text-sm truncate max-w-[250px]">{selectedSource.title}</h3>
+                        </div>
+                        <button
+                            onClick={() => setIsSourcePanelOpen(false)}
+                            className="p-1.5 hover:bg-white/10 rounded-lg transition-all"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-4">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Source Type</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full w-fit ${selectedSource.type === "document" ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"}`}>
+                                {selectedSource.type === "document" ? "Workspace Document" : "Live Web Result"}
+                            </span>
+                        </div>
+
+                        {selectedSource.url && (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">URL</span>
+                                <a href={selectedSource.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline break-all">
+                                    {selectedSource.url}
+                                </a>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Extracted Knowledge</span>
+                            <div className="p-4 bg-white/5 border border-white/5 rounded-xl text-sm leading-relaxed text-gray-300 italic">
+                                "{selectedSource.content}"
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-4 border-t border-white/10 bg-white/5">
+                        <button
+                            onClick={() => setIsSourcePanelOpen(false)}
+                            className="w-full btn btn-primary py-2 text-xs"
+                        >
+                            Close Source
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

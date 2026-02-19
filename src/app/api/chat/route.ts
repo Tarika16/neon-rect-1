@@ -42,8 +42,12 @@ export async function POST(req: Request) {
         // 2. Vector Search (Semantic Retrieval)
         console.time("Chat: VectorSearch");
         let vectorResults: any[] = [];
+        let sources: any[] = [];
+
         try {
+            // Attempt Workspace Search first
             if (workspaceId) {
+                console.log(`Chat: searching workspace ${workspaceId}`);
                 vectorResults = await prisma.$queryRaw`
                     SELECT 
                         chunk.id,
@@ -56,9 +60,10 @@ export async function POST(req: Request) {
                     WHERE doc."workspaceId" = ${workspaceId}
                     AND doc."userId" = ${userId}
                     ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
-                    LIMIT 5;
+                    LIMIT 4;
                 `;
             } else if (documentId) {
+                console.log(`Chat: searching document ${documentId}`);
                 vectorResults = await prisma.$queryRaw`
                     SELECT 
                         chunk.id,
@@ -71,11 +76,15 @@ export async function POST(req: Request) {
                     WHERE doc."id" = ${documentId}
                     AND doc."userId" = ${userId}
                     ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
-                    LIMIT 5;
+                    LIMIT 4;
                 `;
-            } else {
-                // Global Search across all documents
-                vectorResults = await prisma.$queryRaw`
+            }
+
+            // GLOBAL FALLBACK (Try again across all documents if workspace/doc search is empty or poor)
+            const topScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
+            if (vectorResults.length === 0 || topScore < 0.4) {
+                console.log("Chat: Workspace results insufficient. Trying GLOBAL search...");
+                const globalResults: any[] = await prisma.$queryRaw`
                     SELECT 
                         chunk.id,
                         chunk.content,
@@ -86,39 +95,44 @@ export async function POST(req: Request) {
                     JOIN "Document" doc ON chunk."documentId" = doc.id
                     WHERE doc."userId" = ${userId}
                     ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
-                    LIMIT 5;
+                    LIMIT 3;
                 `;
+
+                // Merge global results if they are better
+                if (globalResults.length > 0 && (globalResults[0].similarity > topScore)) {
+                    vectorResults = [...vectorResults, ...globalResults.filter(g => !vectorResults.find(v => v.id === g.id))].slice(0, 5);
+                }
             }
+
             console.timeEnd("Chat: VectorSearch");
         } catch (vectorError: any) {
             console.error("Chat: Vector Search failed:", vectorError);
-            console.timeEnd("Chat: VectorSearch");
         }
 
-        const topScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
         let contextText = "";
-        let sources: any[] = [];
-
         if (vectorResults.length > 0) {
-            contextText += "## Internal Knowledge:\n";
+            contextText += "## WORKSPACE DOCUMENTS:\n";
             vectorResults.forEach((chunk, index) => {
-                contextText += `[${index + 1}] Document: "${chunk.docTitle}"\nContent: ${chunk.content}\n\n`;
-                sources.push({ id: index + 1, type: "document", title: chunk.docTitle, content: chunk.content });
+                const sourceId = sources.length + 1;
+                contextText += `[${sourceId}] From Document: "${chunk.docTitle}"\nContent: ${chunk.content}\n\n`;
+                sources.push({ id: sourceId, type: "document", title: chunk.docTitle, content: chunk.content });
             });
         }
 
-        const isPoorMatch = topScore < 0.5;
-        const shouldSearchWeb = includeWebSearch || (isPoorMatch && vectorResults.length < 2);
+        // WEB SEARCH FALLBACK (Deep Research)
+        const finalTopScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
+        const needsWeb = includeWebSearch || vectorResults.length === 0 || (finalTopScore < 0.3);
 
-        if (shouldSearchWeb) {
+        if (needsWeb) {
+            console.log("Chat: Triggering Deep Search (Firecrawl)...");
             try {
                 const webResults = await searchFirecrawl(question, 3);
                 if (webResults.length > 0) {
-                    contextText += "## Web Search Results:\n";
-                    webResults.forEach((res, index) => {
-                        const sourceIndex = sources.length + 1;
-                        contextText += `[${sourceIndex}] Source: "${res.title}" (${res.url})\nContent: ${res.markdown || res.content}\n\n`;
-                        sources.push({ id: sourceIndex, type: "web", title: res.title, url: res.url, content: res.content });
+                    contextText += "## LIVE WEB KNOWLEDGE:\n";
+                    webResults.forEach((res) => {
+                        const sourceId = sources.length + 1;
+                        contextText += `[${sourceId}] From Web Page: "${res.title}" (${res.url})\nContent: ${res.markdown || res.content}\n\n`;
+                        sources.push({ id: sourceId, type: "web", title: res.title, url: res.url, content: res.content });
                     });
                 }
             } catch (webError: any) {
@@ -141,16 +155,21 @@ export async function POST(req: Request) {
             console.error("Chat: Failed to save user message:", dbError);
         }
 
-        const systemPrompt = `You are an expert research assistant.
-        Goal: Answer the user's question using ONLY the provided context.
-        Rules:
-        1. Use the [number] to cite your sources inline.
-        2. synthesizing internal and web results.
-        3. If not in context, say "I cannot find the answer".
-        4. Be professional.
-        5. Provide exactly 3 suggested follow-up questions starting with "SUGGESTED_QUESTIONS:".
+        const systemPrompt = `You are a world-class AI research assistant.
+        GOAL: Answer the user's question with absolute precision using the provided context.
+        
+        RULES:
+        1. ALWAYS use inline citations like [1], [2] when referencing information.
+        2. If information is from a DOCUMENT, clearly attribute it to the file name.
+        3. If information is from the WEB, clearly attribute it to the URL.
+        4. If you cannot find the answer in the context, say: "I've searched your workspace and the web, but I cannot find a definitive answer for this topic."
+        5. DO NOT hallucinate. Only use the provided Workspace Documents and Live Web Knowledge.
+        
+        Citations used in your answer must correspond to the source list provided.
+        
+        Provide exactly 3 suggested follow-up questions at the end starting with "SUGGESTED_QUESTIONS:".
 
-        Context:
+        CONTEXT:
         ${contextText}`;
 
         // Hybrid LLM Selection
@@ -179,9 +198,10 @@ export async function POST(req: Request) {
                     await (prisma as any).message.create({
                         data: {
                             role: "assistant",
-                            content: event.text,
+                            content: event.text, // Store clean text in DB
                             workspaceId: wsId,
                             userId: userId,
+                            // If we had a metadata field in DB, we'd store sources here
                         },
                     });
                 } catch (dbError) {
@@ -190,7 +210,25 @@ export async function POST(req: Request) {
             },
         });
 
-        return result.toTextStreamResponse();
+        // We wrap the response to include the sources at the end
+        const stream = result.textStream;
+        const readableStream = new ReadableStream({
+            async start(controller) {
+                const reader = stream.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    controller.enqueue(value);
+                }
+                // Append Sources
+                controller.enqueue(`\n\n__SOURCES_METADATA__\n${JSON.stringify(sources)}`);
+                controller.close();
+            },
+        });
+
+        return new Response(readableStream, {
+            headers: { "Content-Type": "text/plain; charset=utf-8" }
+        });
 
     } catch (error: any) {
         console.error("Chat API Error:", error);
