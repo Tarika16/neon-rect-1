@@ -78,7 +78,7 @@ export default function DocumentsPage() {
 
     const handleDeleteDocument = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!window.confirm("Are you sure you want to delete this document?")) return;
+        if (!window.confirm("Are you sure you want to delete this document permanently?")) return;
 
         try {
             const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
@@ -176,14 +176,15 @@ export default function DocumentsPage() {
 
     return (
         <div className="flex h-[calc(100vh-6rem)] gap-6">
-            <div className="w-1/3 glass-card flex flex-col p-4">
+            {/* Sidebar Documents List */}
+            <div className="w-1/3 glass-card flex flex-col p-4 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                         <FileText className="text-purple-400" /> Documents
                     </h2>
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="btn btn-primary btn-sm flex items-center gap-2"
+                        className="btn btn-primary btn-sm flex items-center gap-2 hover:scale-105 transition-transform"
                         disabled={uploading}
                     >
                         {uploading ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
@@ -198,7 +199,7 @@ export default function DocumentsPage() {
                     />
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                     {documents.length === 0 && (
                         <p className="text-gray-400 text-center mt-10 text-sm">No documents yet.</p>
                     )}
@@ -212,21 +213,21 @@ export default function DocumentsPage() {
                                 }
                             }}
                             className={`p-3 rounded-xl cursor-pointer transition-all border relative group ${selectedDoc?.id === doc.id
-                                ? "bg-purple-500/20 border-purple-500/50"
+                                ? "bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/10"
                                 : "bg-white/5 border-white/10 hover:bg-white/10"
                                 }`}
                         >
-                            <div className="flex justify-between items-start">
+                            <div className="flex justify-between items-center">
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-white truncate pr-6">{doc.title}</p>
-                                    <p className="text-xs text-gray-400 mt-1">{formatDate(doc.createdAt)}</p>
+                                    <p className="font-medium text-white truncate pr-2">{doc.title}</p>
+                                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-tighter font-mono">{formatDate(doc.createdAt)}</p>
                                 </div>
                                 <button
                                     onClick={(e) => handleDeleteDocument(doc.id, e)}
-                                    className="opacity-60 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10"
-                                    title="Delete Document"
+                                    className="p-1.5 text-red-400/70 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/20 shadow-sm border border-transparent hover:border-red-400/30"
+                                    title="Delete This File"
                                 >
-                                    <Trash2 size={14} />
+                                    <Trash2 size={16} />
                                 </button>
                             </div>
                         </div>
@@ -234,22 +235,32 @@ export default function DocumentsPage() {
                 </div>
             </div>
 
-            <div className="flex-1 glass-card flex flex-col p-0 overflow-hidden relative">
+            {/* Chat Interface */}
+            <div className="flex-1 glass-card flex flex-col p-0 overflow-hidden relative animate-fade-in">
                 {selectedDoc ? (
                     <>
-                        <div className="p-4 border-b border-white/10 bg-white/5">
+                        <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center bg-gradient-to-r from-transparent to-purple-500/5">
                             <h3 className="font-bold text-lg flex items-center gap-2">
                                 <MessageSquare className="text-green-400" />
-                                Chatting with: <span className="text-purple-300">{selectedDoc.title}</span>
+                                Chatting: <span className="text-purple-300 truncate max-w-[200px]">{selectedDoc.title}</span>
                             </h3>
+
+                            {/* Unmistakable Header Delete Button */}
+                            <button
+                                onClick={(e) => handleDeleteDocument(selectedDoc.id, e as any)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/30 rounded-lg transition-all"
+                            >
+                                <Trash2 size={14} />
+                                Delete File
+                            </button>
                         </div>
 
                         <div className="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar">
                             {messages.map((m, i) => (
                                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${m.role === "user"
+                                    <div className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === "user"
                                         ? "bg-purple-600 text-white rounded-tr-none shadow-lg shadow-purple-500/20"
-                                        : "bg-gray-800/80 text-gray-200 border border-white/10 rounded-tl-none whitespace-pre-wrap"
+                                        : "bg-gray-800/80 text-gray-200 border border-white/10 rounded-tl-none whitespace-pre-wrap shadow-inner"
                                         }`}>
                                         {m.content || (loading && i === messages.length - 1 ? <Loader2 className="animate-spin text-purple-400" size={16} /> : "")}
                                     </div>
@@ -268,7 +279,7 @@ export default function DocumentsPage() {
                             />
                             <button
                                 type="submit"
-                                className="btn btn-primary"
+                                className="btn btn-primary shadow-lg shadow-purple-500/20"
                                 disabled={loading || !input.trim()}
                             >
                                 <Send size={18} />
@@ -276,9 +287,10 @@ export default function DocumentsPage() {
                         </form>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                        <FileText size={48} className="mb-4 opacity-50" />
-                        <p>Select a document to verify content or ask questions.</p>
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gradient-to-b from-transparent to-white/5">
+                        <FileText size={48} className="mb-4 opacity-50 text-purple-400 animate-pulse" />
+                        <p className="font-medium">Direct Document Intelligence</p>
+                        <p className="text-sm opacity-60">Select a file from the sidebar to start chatting.</p>
                     </div>
                 )}
             </div>

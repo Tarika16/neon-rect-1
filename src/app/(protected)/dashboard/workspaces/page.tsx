@@ -69,7 +69,7 @@ export default function WorkspacesPage() {
         e.preventDefault(); // Prevent Link navigation
         e.stopPropagation();
 
-        if (!window.confirm("Are you sure you want to delete this workspace? All documents and messages inside will be lost.")) return;
+        if (!window.confirm("CRITICAL: Are you sure you want to delete this workspace folder? All data, documents, and chat history inside will be PERMANENTLY deleted.")) return;
 
         try {
             const res = await fetch(`/api/workspaces/${id}`, { method: "DELETE" });
@@ -91,7 +91,7 @@ export default function WorkspacesPage() {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                     <Layers className="text-purple-400" /> My Workspaces
@@ -132,38 +132,39 @@ export default function WorkspacesPage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {workspaces.map((ws) => (
-                        <div key={ws.id} className="relative group">
+                        <div key={ws.id} className="relative group hover:scale-[1.02] transition-transform">
                             <Link
                                 href={`/dashboard/workspaces/${ws.id}`}
-                                className="glass-card p-6 block hover:bg-white/5 transition-all border border-white/10 hover:border-purple-500/50"
+                                className="glass-card p-6 block hover:bg-white/5 transition-all border border-white/10 hover:border-purple-500/50 h-full"
                             >
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="p-3 bg-purple-500/20 rounded-lg group-hover:bg-purple-500/30 transition-colors">
                                         <Layers className="text-purple-400 group-hover:text-purple-300" size={24} />
                                     </div>
-                                    <span className="text-xs text-gray-500 font-mono">
-                                        {ws.id.slice(-4)}
+                                    <span className="text-[10px] text-gray-600 font-mono tracking-tighter">
+                                        ID: {ws.id.slice(-6)}
                                     </span>
                                 </div>
 
-                                <h3 className="text-lg font-bold text-white mb-2 truncate pr-8">{ws.name}</h3>
+                                <h3 className="text-lg font-bold text-white mb-2 truncate pr-10">{ws.name}</h3>
 
-                                <div className="flex items-center gap-4 text-sm text-gray-400">
-                                    <span className="flex items-center gap-1">
-                                        <FileText size={14} />
+                                <div className="flex items-center gap-4 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                                    <span className="flex items-center gap-1.5">
+                                        <FileText size={12} className="text-purple-400" />
                                         {ws._count?.documents || 0} Docs
                                     </span>
-                                    <span className="flex items-center gap-1">
-                                        <Calendar size={14} />
+                                    <span className="flex items-center gap-1.5 line-clamp-1">
+                                        <Calendar size={12} className="text-gray-500" />
                                         {formatDate(ws.createdAt)}
                                     </span>
                                 </div>
                             </Link>
 
+                            {/* High-Visibility Workspace Delete Button */}
                             <button
                                 onClick={(e) => handleDeleteWorkspace(ws.id, e)}
-                                className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10 z-10"
-                                title="Delete Workspace"
+                                className="absolute top-4 right-4 p-2 text-red-400/80 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/20 border border-white/10 hover:border-red-400/40 bg-gray-900/50 z-10"
+                                title="Delete Workspace Folder"
                             >
                                 <Trash2 size={16} />
                             </button>
