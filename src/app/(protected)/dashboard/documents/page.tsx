@@ -76,6 +76,33 @@ export default function DocumentsPage() {
         }
     };
 
+    const handleDeleteDocument = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!window.confirm("Are you sure you want to delete this document?")) return;
+
+        try {
+            const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                setDocuments(prev => prev.filter(doc => doc.id !== id));
+                if (selectedDoc?.id === id) {
+                    setSelectedDoc(null);
+                    setMessages([]);
+                }
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to delete document");
+            }
+        } catch (error) {
+            console.error("Delete Error:", error);
+            alert("An error occurred during deletion.");
+        }
+    };
+
+    const formatDate = (dateString: string) => {
+        const d = new Date(dateString);
+        return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString();
+    };
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || !selectedDoc) return;
@@ -184,13 +211,24 @@ export default function DocumentsPage() {
                                     setMessages([{ role: "ai", content: `I'm ready to answer questions about **${doc.title}**.` }]);
                                 }
                             }}
-                            className={`p-3 rounded-xl cursor-pointer transition-all border ${selectedDoc?.id === doc.id
+                            className={`p-3 rounded-xl cursor-pointer transition-all border relative group ${selectedDoc?.id === doc.id
                                 ? "bg-purple-500/20 border-purple-500/50"
-                                : "bg-white/5 border-white/10 hover:bg-white/10 group"
+                                : "bg-white/5 border-white/10 hover:bg-white/10"
                                 }`}
                         >
-                            <p className="font-medium text-white truncate">{doc.title}</p>
-                            <p className="text-xs text-gray-400 mt-1">{new Date(doc.createdAt).toLocaleDateString()}</p>
+                            <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-white truncate pr-6">{doc.title}</p>
+                                    <p className="text-xs text-gray-400 mt-1">{formatDate(doc.createdAt)}</p>
+                                </div>
+                                <button
+                                    onClick={(e) => handleDeleteDocument(doc.id, e)}
+                                    className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10"
+                                    title="Delete Document"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Layers, Plus, Loader2, Calendar, FileText } from "lucide-react";
+import { Layers, Plus, Loader2, Calendar, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -55,8 +55,6 @@ export default function WorkspacesPage() {
                 const newWorkspace = await res.json();
                 setWorkspaces([newWorkspace, ...workspaces]);
                 setNewName("");
-                // Optional: Redirect immediately
-                // router.push(`/dashboard/workspaces/${newWorkspace.id}`);
             } else {
                 alert("Failed to create workspace");
             }
@@ -65,6 +63,31 @@ export default function WorkspacesPage() {
         } finally {
             setCreating(false);
         }
+    };
+
+    const handleDeleteWorkspace = async (id: string, e: React.MouseEvent) => {
+        e.preventDefault(); // Prevent Link navigation
+        e.stopPropagation();
+
+        if (!window.confirm("Are you sure you want to delete this workspace? All documents and messages inside will be lost.")) return;
+
+        try {
+            const res = await fetch(`/api/workspaces/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                setWorkspaces(prev => prev.filter(ws => ws.id !== id));
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || "Failed to delete workspace");
+            }
+        } catch (error) {
+            console.error("Delete Workspace Error:", error);
+            alert("An error occurred during deletion.");
+        }
+    };
+
+    const formatDate = (dateString: string) => {
+        const d = new Date(dateString);
+        return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString();
     };
 
     return (
@@ -109,33 +132,42 @@ export default function WorkspacesPage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {workspaces.map((ws) => (
-                        <Link
-                            key={ws.id}
-                            href={`/dashboard/workspaces/${ws.id}`}
-                            className="glass-card p-6 hover:bg-white/5 transition-all group block border border-white/10 hover:border-purple-500/50"
-                        >
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-purple-500/20 rounded-lg group-hover:bg-purple-500/30 transition-colors">
-                                    <Layers className="text-purple-400 group-hover:text-purple-300" size={24} />
+                        <div key={ws.id} className="relative group">
+                            <Link
+                                href={`/dashboard/workspaces/${ws.id}`}
+                                className="glass-card p-6 block hover:bg-white/5 transition-all border border-white/10 hover:border-purple-500/50"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-3 bg-purple-500/20 rounded-lg group-hover:bg-purple-500/30 transition-colors">
+                                        <Layers className="text-purple-400 group-hover:text-purple-300" size={24} />
+                                    </div>
+                                    <span className="text-xs text-gray-500 font-mono">
+                                        {ws.id.slice(-4)}
+                                    </span>
                                 </div>
-                                <span className="text-xs text-gray-500 font-mono">
-                                    {ws.id.slice(-4)}
-                                </span>
-                            </div>
 
-                            <h3 className="text-lg font-bold text-white mb-2 truncate">{ws.name}</h3>
+                                <h3 className="text-lg font-bold text-white mb-2 truncate pr-8">{ws.name}</h3>
 
-                            <div className="flex items-center gap-4 text-sm text-gray-400">
-                                <span className="flex items-center gap-1">
-                                    <FileText size={14} />
-                                    {ws._count?.documents || 0} Docs
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <Calendar size={14} />
-                                    {new Date(ws.createdAt).toLocaleDateString()}
-                                </span>
-                            </div>
-                        </Link>
+                                <div className="flex items-center gap-4 text-sm text-gray-400">
+                                    <span className="flex items-center gap-1">
+                                        <FileText size={14} />
+                                        {ws._count?.documents || 0} Docs
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <Calendar size={14} />
+                                        {formatDate(ws.createdAt)}
+                                    </span>
+                                </div>
+                            </Link>
+
+                            <button
+                                onClick={(e) => handleDeleteWorkspace(ws.id, e)}
+                                className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10 z-10"
+                                title="Delete Workspace"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
                     ))}
                 </div>
             )}
