@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, FileText, MessageSquare, Send, Loader2, Trash2 } from "lucide-react";
+import { Upload, FileText, MessageSquare, Send, Loader2, Trash2, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Document {
@@ -78,12 +78,12 @@ export default function DocumentsPage() {
 
     const handleDeleteDocument = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!window.confirm("Are you sure you want to delete this document permanently?")) return;
+        if (!window.confirm("PERMANENT DELETE: Are you sure you want to delete this document? This action cannot be undone.")) return;
 
         try {
             const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
             if (res.ok) {
-                setDocuments(prev => prev.filter(doc => doc.id !== id));
+                setDocuments((prev) => prev.filter((doc) => doc.id !== id));
                 if (selectedDoc?.id === id) {
                     setSelectedDoc(null);
                     setMessages([]);
@@ -100,7 +100,8 @@ export default function DocumentsPage() {
 
     const formatDate = (dateString: string) => {
         const d = new Date(dateString);
-        return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString();
+        if (isNaN(d.getTime())) return "N/A";
+        return d.toLocaleDateString();
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -110,7 +111,6 @@ export default function DocumentsPage() {
         const userMessage = input;
         setInput("");
 
-        // Update messages with user message and empty AI placeholder
         setMessages((prev) => [
             ...prev,
             { role: "user", content: userMessage },
@@ -179,9 +179,12 @@ export default function DocumentsPage() {
             {/* Sidebar Documents List */}
             <div className="w-1/3 glass-card flex flex-col p-4 animate-fade-in">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <FileText className="text-purple-400" /> Documents
-                    </h2>
+                    <div className="flex flex-col">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <FileText className="text-purple-400" /> Documents
+                        </h2>
+                        <span className="text-[10px] text-gray-600 font-mono tracking-widest uppercase">System v1.7.2-stable</span>
+                    </div>
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         className="btn btn-primary btn-sm flex items-center gap-2 hover:scale-105 transition-transform"
@@ -199,7 +202,7 @@ export default function DocumentsPage() {
                     />
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
                     {documents.length === 0 && (
                         <p className="text-gray-400 text-center mt-10 text-sm">No documents yet.</p>
                     )}
@@ -212,22 +215,26 @@ export default function DocumentsPage() {
                                     setMessages([{ role: "ai", content: `I'm ready to answer questions about **${doc.title}**.` }]);
                                 }
                             }}
-                            className={`p-3 rounded-xl cursor-pointer transition-all border relative group ${selectedDoc?.id === doc.id
-                                ? "bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/10"
-                                : "bg-white/5 border-white/10 hover:bg-white/10"
+                            className={`p-4 rounded-2xl cursor-pointer transition-all border relative flex flex-col gap-3 ${selectedDoc?.id === doc.id
+                                ? "bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/10 scale-[1.02]"
+                                : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
                                 }`}
                         >
-                            <div className="flex justify-between items-center">
+                            <div className="flex justify-between items-start gap-2">
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-white truncate pr-2">{doc.title}</p>
-                                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-tighter font-mono">{formatDate(doc.createdAt)}</p>
+                                    <p className="font-bold text-white truncate text-base">{doc.title}</p>
+                                    <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1 font-medium">
+                                        Added: {formatDate(doc.createdAt)}
+                                    </p>
                                 </div>
+
+                                {/* HIGH VISIBILITY SIDEBAR DELETE BUTTON */}
                                 <button
                                     onClick={(e) => handleDeleteDocument(doc.id, e)}
-                                    className="p-1.5 text-red-400/70 hover:text-red-400 transition-all rounded-lg hover:bg-red-400/20 shadow-sm border border-transparent hover:border-red-400/30"
-                                    title="Delete This File"
+                                    className="p-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white transition-all rounded-xl border border-red-500/20 hover:border-red-500 shadow-sm flex items-center justify-center group"
+                                    title="PERMANENTLY DELETE THIS FILE"
                                 >
-                                    <Trash2 size={16} />
+                                    <Trash2 size={18} className="group-hover:scale-110 transition-transform" />
                                 </button>
                             </div>
                         </div>
@@ -239,28 +246,28 @@ export default function DocumentsPage() {
             <div className="flex-1 glass-card flex flex-col p-0 overflow-hidden relative animate-fade-in">
                 {selectedDoc ? (
                     <>
-                        <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center bg-gradient-to-r from-transparent to-purple-500/5">
+                        <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center bg-gradient-to-r from-transparent to-red-500/5">
                             <h3 className="font-bold text-lg flex items-center gap-2">
                                 <MessageSquare className="text-green-400" />
-                                Chatting: <span className="text-purple-300 truncate max-w-[200px]">{selectedDoc.title}</span>
+                                <span className="text-white">Chat:</span> <span className="text-purple-300 truncate max-w-[250px]">{selectedDoc.title}</span>
                             </h3>
 
-                            {/* Unmistakable Header Delete Button */}
+                            {/* MASSIVE HEADER DELETE BUTTON */}
                             <button
                                 onClick={(e) => handleDeleteDocument(selectedDoc.id, e as any)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-400 bg-red-400/10 hover:bg-red-400/20 border border-red-400/30 rounded-lg transition-all"
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-black text-white bg-red-600 hover:bg-red-700 border-2 border-red-500/50 rounded-xl transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] uppercase tracking-wider"
                             >
-                                <Trash2 size={14} />
-                                Delete File
+                                <Trash2 size={18} />
+                                Delete Permanently
                             </button>
                         </div>
 
                         <div className="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar">
                             {messages.map((m, i) => (
                                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                                    <div className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === "user"
-                                        ? "bg-purple-600 text-white rounded-tr-none shadow-lg shadow-purple-500/20"
-                                        : "bg-gray-800/80 text-gray-200 border border-white/10 rounded-tl-none whitespace-pre-wrap shadow-inner"
+                                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${m.role === "user"
+                                        ? "bg-purple-600 text-white rounded-tr-none shadow-lg shadow-purple-500/20 animate-slide-in-right"
+                                        : "bg-gray-800/90 text-gray-200 border border-white/10 rounded-tl-none whitespace-pre-wrap shadow-inner animate-slide-in-left"
                                         }`}>
                                         {m.content || (loading && i === messages.length - 1 ? <Loader2 className="animate-spin text-purple-400" size={16} /> : "")}
                                     </div>
@@ -272,25 +279,35 @@ export default function DocumentsPage() {
                         <form onSubmit={handleSendMessage} className="p-4 border-t border-white/10 bg-white/5 flex gap-2">
                             <input
                                 className="input-field flex-1"
-                                placeholder="Ask a question about this document..."
+                                placeholder="Ask about this document..."
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 disabled={loading}
                             />
                             <button
                                 type="submit"
-                                className="btn btn-primary shadow-lg shadow-purple-500/20"
+                                className="btn btn-primary px-6 shadow-lg shadow-purple-500/20 flex items-center gap-2"
                                 disabled={loading || !input.trim()}
                             >
                                 <Send size={18} />
+                                <span>Send</span>
                             </button>
                         </form>
                     </>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gradient-to-b from-transparent to-white/5">
-                        <FileText size={48} className="mb-4 opacity-50 text-purple-400 animate-pulse" />
-                        <p className="font-medium">Direct Document Intelligence</p>
-                        <p className="text-sm opacity-60">Select a file from the sidebar to start chatting.</p>
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gradient-to-b from-transparent to-white/5 p-10 text-center">
+                        <div className="p-6 bg-purple-500/10 rounded-full mb-6 animate-pulse">
+                            <FileText size={64} className="text-purple-400" />
+                        </div>
+                        <h4 className="text-xl font-bold text-white mb-2">Select a Document</h4>
+                        <p className="max-w-xs text-sm opacity-60">Pick a file from the list to start a conversation or delete unwanted items.</p>
+
+                        <div className="mt-12 p-4 bg-orange-500/5 border border-orange-500/20 rounded-2xl flex items-center gap-4 max-w-md">
+                            <AlertTriangle className="text-orange-400 shrink-0" />
+                            <p className="text-xs text-left text-orange-200/70 italic">
+                                Note: If you don't see the delete button next to your files, please refresh the page (Ctrl+F5) to clear the browser cache.
+                            </p>
+                        </div>
                     </div>
                 )}
             </div>
