@@ -32,7 +32,7 @@ export default function DocumentsPage() {
 
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+    }, [messages, loading]);
 
     const fetchDocuments = async () => {
         try {
@@ -82,11 +82,14 @@ export default function DocumentsPage() {
 
         const userMessage = input;
         setInput("");
-        setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
-        // Add placeholder for AI response
-        const aiMessageId = Date.now().toString();
-        setMessages((prev) => [...prev, { role: "ai", content: "" }]);
+        // Update messages with user message and empty AI placeholder
+        setMessages((prev) => [
+            ...prev,
+            { role: "user", content: userMessage },
+            { role: "ai", content: "" }
+        ]);
+
         setLoading(true);
 
         try {
@@ -97,11 +100,11 @@ export default function DocumentsPage() {
             });
 
             if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || "Failed context processing");
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || `Server error: ${res.status}`);
             }
 
-            if (!res.body) return;
+            if (!res.body) throw new Error("No response body received from AI.");
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -118,15 +121,15 @@ export default function DocumentsPage() {
                     setMessages(prev => {
                         const newMsgs = [...prev];
                         const lastMsg = newMsgs[newMsgs.length - 1];
-                        if (lastMsg.role === "ai") {
-                            lastMsg.content = accumulatedContent;
+                        if (lastMsg && lastMsg.role === "ai") {
+                            return [...newMsgs.slice(0, -1), { ...lastMsg, content: accumulatedContent }];
                         }
                         return newMsgs;
                     });
                 }
             } catch (streamError: any) {
-                console.error("Stream error:", streamError);
-                throw new Error(`Connection lost: ${streamError.message}`);
+                console.error("Stream read error:", streamError);
+                throw new Error(`Connection interrupted: ${streamError.message}`);
             }
 
         } catch (error: any) {
@@ -134,10 +137,10 @@ export default function DocumentsPage() {
             setMessages((prev) => {
                 const newMsgs = [...prev];
                 const lastMsg = newMsgs[newMsgs.length - 1];
-                if (lastMsg.role === "ai") {
-                    lastMsg.content = `⚠️ Error: ${error.message || "Could not generate answer."}`;
+                if (lastMsg && lastMsg.role === "ai") {
+                    return [...newMsgs.slice(0, -1), { role: "ai", content: `⚠️ Error: ${error.message}` }];
                 }
-                return newMsgs;
+                return [...newMsgs, { role: "ai", content: `⚠️ Error: ${error.message}` }];
             });
         } finally {
             setLoading(false);
@@ -146,7 +149,6 @@ export default function DocumentsPage() {
 
     return (
         <div className="flex h-[calc(100vh-6rem)] gap-6">
-            {/* Sidebar: Document List */}
             <div className="w-1/3 glass-card flex flex-col p-4">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -164,12 +166,12 @@ export default function DocumentsPage() {
                         type="file"
                         ref={fileInputRef}
                         className="hidden"
-                        accept=".pdf,.txt"
+                        accept=".pdf,.txt,.docx,.csv"
                         onChange={handleUpload}
                     />
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                     {documents.length === 0 && (
                         <p className="text-gray-400 text-center mt-10 text-sm">No documents yet.</p>
                     )}
@@ -184,7 +186,7 @@ export default function DocumentsPage() {
                             }}
                             className={`p-3 rounded-xl cursor-pointer transition-all border ${selectedDoc?.id === doc.id
                                 ? "bg-purple-500/20 border-purple-500/50"
-                                : "bg-white/5 border-white/10 hover:bg-white/10"
+                                : "bg-white/5 border-white/10 hover:bg-white/10 group"
                                 }`}
                         >
                             <p className="font-medium text-white truncate">{doc.title}</p>
@@ -194,7 +196,6 @@ export default function DocumentsPage() {
                 </div>
             </div>
 
-            {/* Main Area: Chat */}
             <div className="flex-1 glass-card flex flex-col p-0 overflow-hidden relative">
                 {selectedDoc ? (
                     <>
@@ -205,24 +206,17 @@ export default function DocumentsPage() {
                             </h3>
                         </div>
 
-                        <div className="flex-1 p-4 overflow-y-auto space-y-4">
+                        <div className="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar">
                             {messages.map((m, i) => (
                                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                                     <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${m.role === "user"
-                                        ? "bg-purple-600 text-white rounded-tr-none"
+                                        ? "bg-purple-600 text-white rounded-tr-none shadow-lg shadow-purple-500/20"
                                         : "bg-gray-800/80 text-gray-200 border border-white/10 rounded-tl-none whitespace-pre-wrap"
                                         }`}>
-                                        {m.content}
+                                        {m.content || (loading && i === messages.length - 1 ? <Loader2 className="animate-spin text-purple-400" size={16} /> : "")}
                                     </div>
                                 </div>
                             ))}
-                            {loading && (
-                                <div className="flex justify-start">
-                                    <div className="bg-gray-800/80 p-3 rounded-2xl rounded-tl-none border border-white/10">
-                                        <Loader2 className="animate-spin text-purple-400" size={20} />
-                                    </div>
-                                </div>
-                            )}
                             <div ref={endRef} />
                         </div>
 

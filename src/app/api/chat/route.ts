@@ -4,11 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { searchFirecrawl } from "@/lib/firecrawl";
 
-// Configure Groq as an OpenAI-compatible provider
-if (!process.env.GROQ_API_KEY) {
-    console.warn("GROQ_API_KEY is missing from environment variables.");
-}
-
+// Configure Chat Providers
 const groq = createOpenAI({
     baseURL: "https://api.groq.com/openai/v1",
     apiKey: process.env.GROQ_API_KEY || "dummy_key",
@@ -81,115 +77,95 @@ export async function POST(req: Request) {
         } catch (vectorError: any) {
             console.error("Chat: Vector Search failed:", vectorError);
             console.timeEnd("Chat: VectorSearch");
-            // Non-fatal, proceed with empty context if vector search fails
         }
 
-        // 3. Evaluate Retrieval Quality
         const topScore = vectorResults.length > 0 ? vectorResults[0].similarity : 0;
-
         let contextText = "";
         let sources: any[] = [];
 
-        // Format Document Context
         if (vectorResults.length > 0) {
             contextText += "## Internal Knowledge:\n";
             vectorResults.forEach((chunk, index) => {
                 contextText += `[${index + 1}] Document: "${chunk.docTitle}"\nContent: ${chunk.content}\n\n`;
-                sources.push({
-                    id: index + 1,
-                    type: "document",
-                    title: chunk.docTitle,
-                    content: chunk.content
-                });
+                sources.push({ id: index + 1, type: "document", title: chunk.docTitle, content: chunk.content });
             });
         }
 
-        // 4. Hybrid Logic: Web Search Fallback
         const isPoorMatch = topScore < 0.5;
         const shouldSearchWeb = includeWebSearch || (isPoorMatch && vectorResults.length < 2);
 
         if (shouldSearchWeb) {
-            console.log("Chat: Triggering Web Search...");
-            console.time("Chat: WebSearch");
             try {
                 const webResults = await searchFirecrawl(question, 3);
-                console.timeEnd("Chat: WebSearch");
                 if (webResults.length > 0) {
                     contextText += "## Web Search Results:\n";
                     webResults.forEach((res, index) => {
                         const sourceIndex = sources.length + 1;
                         contextText += `[${sourceIndex}] Source: "${res.title}" (${res.url})\nContent: ${res.markdown || res.content}\n\n`;
-                        sources.push({
-                            id: sourceIndex,
-                            type: "web",
-                            title: res.title,
-                            url: res.url,
-                            content: res.content
-                        });
+                        sources.push({ id: sourceIndex, type: "web", title: res.title, url: res.url, content: res.content });
                     });
                 }
             } catch (webError: any) {
                 console.error("Chat: Web Search Failed", webError);
-                console.timeEnd("Chat: WebSearch");
             }
         }
 
-        // 5. Streaming LLM Generation
-
-        // 5. Save User Message
+        // Save User Message
+        const wsId = workspaceId || null;
         try {
             await (prisma as any).message.create({
                 data: {
                     role: "user",
                     content: question,
-                    workspaceId: workspaceId as string,
-                    userId: session.user.id as string,
+                    workspaceId: wsId,
+                    userId: session.user.id,
                 },
             });
         } catch (dbError) {
             console.error("Chat: Failed to save user message:", dbError);
         }
 
-        // 6. Streaming LLM Generation
-        const userId = session.user.id as string;
-        const wsId = workspaceId as string;
-
         const systemPrompt = `You are an expert research assistant.
-        
         Goal: Answer the user's question using ONLY the provided context.
-        
         Rules:
-        1. Use the [number] to cite your sources inline. Example: "The project deadline is Friday [1]."
-        2. If the context has both Internal Knowledge and Web Search Results, synthesize them.
-        3. If the answer is NOT in the context, say "I cannot find the answer in the provided documents or web search."
-        4. Be concise and professional.
-        5. CRITICAL: At the very end of your response, after any citations, provide exactly 3 suggested follow-up questions starting with "SUGGESTED_QUESTIONS:". Separate them with newlines. 
-           Example:
-           ... your answer ...
-           SUGGESTED_QUESTIONS:
-           What is the deadline for Phase 2?
-           Who is the lead project manager?
-           Is there a budget allocated?
-        
-        Context:
-        ${contextText}
-        `;
+        1. Use the [number] to cite your sources inline.
+        2. synthesizing internal and web results.
+        3. If not in context, say "I cannot find the answer".
+        4. Be professional.
+        5. Provide exactly 3 suggested follow-up questions starting with "SUGGESTED_QUESTIONS:".
 
-        console.time("Chat: StreamStarting");
+        Context:
+        ${contextText}`;
+
+        // Hybrid LLM Selection
+        let chatModel;
+        const openRouterKey = process.env.OPENAI_API_KEY;
+        const groqKey = process.env.GROQ_API_KEY;
+
+        if (groqKey && groqKey.startsWith("gsk_")) {
+            chatModel = groq("llama-3.1-8b-instant");
+        } else if (openRouterKey && openRouterKey.startsWith("sk-or-")) {
+            const openrouter = createOpenAI({
+                baseURL: "https://openrouter.ai/api/v1",
+                apiKey: openRouterKey,
+            });
+            chatModel = openrouter("openai/gpt-4o-mini");
+        } else {
+            throw new Error("No valid Chat API key found");
+        }
+
         const result = streamText({
-            model: groq("llama-3.1-8b-instant"),
+            model: chatModel,
             system: systemPrompt,
             messages: [{ role: "user", content: question }],
             onFinish: async (event) => {
-                console.log("Chat: Stream Finished, saving to DB...");
-                // Save AI Message when stream completes
                 try {
                     await (prisma as any).message.create({
                         data: {
                             role: "assistant",
                             content: event.text,
                             workspaceId: wsId,
-                            userId: userId,
+                            userId: session.user.id,
                         },
                     });
                 } catch (dbError) {
@@ -197,16 +173,11 @@ export async function POST(req: Request) {
                 }
             },
         });
-        console.timeEnd("Chat: StreamStarting");
 
         return result.toTextStreamResponse();
 
     } catch (error: any) {
-        console.error("Chat API Detailed Error:", {
-            message: error.message,
-            stack: error.stack,
-            cause: error.cause
-        });
+        console.error("Chat API Error:", error);
         return new Response(JSON.stringify({ error: error.message || "Failed to generate answer" }), {
             status: 500,
             headers: { "Content-Type": "application/json" }

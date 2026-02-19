@@ -68,8 +68,8 @@ model Message {
   id          String    @id @default(cuid())
   role        String    // "user" | "assistant"
   content     String    @db.Text
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
