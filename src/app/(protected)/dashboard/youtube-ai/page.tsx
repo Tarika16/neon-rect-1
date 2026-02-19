@@ -81,8 +81,8 @@ export default function YouTubeAIPage() {
     };
 
     const handleScreenshotUpload = async (file: File) => {
-        if (file.size > 50 * 1024 * 1024) {
-            setError("File exceeds 50MB limit. Please use a smaller file.");
+        if (file.size > 4 * 1024 * 1024) {
+            setError("File exceeds 4MB limit for screenshots. Please use a smaller image.");
             return;
         }
 
@@ -182,8 +182,8 @@ export default function YouTubeAIPage() {
                     <button
                         onClick={() => { setInputMode("youtube"); setError(""); }}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${inputMode === "youtube"
-                                ? "text-red-400 bg-red-500/5 border-b-2 border-red-500"
-                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            ? "text-red-400 bg-red-500/5 border-b-2 border-red-500"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
                             }`}
                     >
                         <LinkIcon size={16} />
@@ -192,8 +192,8 @@ export default function YouTubeAIPage() {
                     <button
                         onClick={() => { setInputMode("manual"); setError(""); }}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${inputMode === "manual"
-                                ? "text-purple-400 bg-purple-500/5 border-b-2 border-purple-500"
-                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            ? "text-purple-400 bg-purple-500/5 border-b-2 border-purple-500"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
                             }`}
                     >
                         <Type size={16} />
@@ -202,8 +202,8 @@ export default function YouTubeAIPage() {
                     <button
                         onClick={() => setShowScreenshotUpload(!showScreenshotUpload)}
                         className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all ${showScreenshotUpload
-                                ? "text-amber-400 bg-amber-500/5 border-b-2 border-amber-500"
-                                : "text-gray-400 hover:text-white hover:bg-white/5"
+                            ? "text-amber-400 bg-amber-500/5 border-b-2 border-amber-500"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
                             }`}
                     >
                         <ImageIcon size={16} />
@@ -275,15 +275,15 @@ export default function YouTubeAIPage() {
                                 onDrop={handleDrop}
                                 onClick={() => fileRef.current?.click()}
                                 className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragOver
-                                        ? "border-amber-500 bg-amber-500/10"
-                                        : "border-white/10 hover:border-white/20 hover:bg-white/5"
+                                    ? "border-amber-500 bg-amber-500/10"
+                                    : "border-white/10 hover:border-white/20 hover:bg-white/5"
                                     }`}
                             >
                                 <ImageIcon size={32} className="mx-auto mb-3 text-gray-500" />
                                 <p className="text-gray-400 text-sm">
                                     Drag &amp; drop a screenshot of educational content here, or <span className="text-amber-400 font-semibold">click to browse</span>
                                 </p>
-                                <p className="text-gray-500 text-xs mt-1">PNG, JPG, WebP — up to 50MB</p>
+                                <p className="text-gray-500 text-xs mt-1">PNG, JPG, WebP — up to 4MB</p>
                             </div>
                             <input
                                 ref={fileRef}
@@ -345,10 +345,10 @@ export default function YouTubeAIPage() {
                                 <h2 className="text-lg font-bold text-white truncate">{result.title}</h2>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${result.source === "youtube"
-                                            ? "bg-red-500/15 text-red-400 border-red-500/20"
-                                            : result.source === "manual"
-                                                ? "bg-purple-500/15 text-purple-400 border-purple-500/20"
-                                                : "bg-amber-500/15 text-amber-400 border-amber-500/20"
+                                        ? "bg-red-500/15 text-red-400 border-red-500/20"
+                                        : result.source === "manual"
+                                            ? "bg-purple-500/15 text-purple-400 border-purple-500/20"
+                                            : "bg-amber-500/15 text-amber-400 border-amber-500/20"
                                         }`}>
                                         {result.source === "youtube" ? "YouTube Video" : result.source === "manual" ? "Pasted Text" : "Screenshot Analysis"}
                                     </span>
@@ -364,8 +364,8 @@ export default function YouTubeAIPage() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-all border-b-2 ${activeTab === tab.id
-                                        ? "text-purple-400 border-purple-500 bg-purple-500/5"
-                                        : "text-gray-400 border-transparent hover:text-white hover:bg-white/5"
+                                    ? "text-purple-400 border-purple-500 bg-purple-500/5"
+                                    : "text-gray-400 border-transparent hover:text-white hover:bg-white/5"
                                     }`}
                             >
                                 {tab.icon}

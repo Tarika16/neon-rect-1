@@ -41,18 +41,18 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: "No screenshot file provided" }, { status: 400 });
             }
 
-            // 50MB limit
-            if (file.size > 50 * 1024 * 1024) {
-                return NextResponse.json({ error: "File exceeds 50MB limit" }, { status: 400 });
+            // 4MB limit (Vercel serverless limit is ~4.5MB)
+            if (file.size > 4 * 1024 * 1024) {
+                return NextResponse.json({ error: "File exceeds 4MB limit for screenshots. Please use a smaller image." }, { status: 400 });
             }
 
             const bytes = await file.arrayBuffer();
             const base64 = Buffer.from(bytes).toString("base64");
             const mimeType = file.type || "image/png";
 
-            // Use LLM to analyze the screenshot
+            // Use Vision LLM to analyze the screenshot
             const { text: analysis } = await generateText({
-                model: groq("llama-3.3-70b-versatile"),
+                model: groq("llama-3.2-11b-vision-preview"),
                 messages: [
                     {
                         role: "user",
