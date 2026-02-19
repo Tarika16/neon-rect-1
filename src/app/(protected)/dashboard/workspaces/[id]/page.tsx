@@ -683,6 +683,17 @@ export default function WorkspaceDetailPage() {
                         </div>
 
                         <div className="flex-1 p-4 overflow-y-auto space-y-6 scroll-smooth custom-scrollbar">
+                            {documents.length === 0 && (
+                                <div className="mx-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3 animate-fade-in">
+                                    <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                        <span className="text-amber-400 text-xs font-bold">!</span>
+                                    </div>
+                                    <div className="text-xs text-amber-300/90 leading-relaxed">
+                                        <span className="font-semibold text-amber-300">No documents uploaded.</span>{" "}
+                                        AI answers will use general knowledge only. Upload files for document-based answers, or enable <span className="font-semibold text-blue-300">Deep Search</span> for live web results.
+                                    </div>
+                                </div>
+                            )}
                             {messages.map((m) => (
                                 <div key={m.id} className={`flex gap-3 animate-slide-up ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
                                     {/* Avatar */}
