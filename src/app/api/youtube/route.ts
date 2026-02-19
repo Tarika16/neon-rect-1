@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
             // Use Vision LLM to analyze the screenshot
             const { text: analysis } = await generateText({
-                model: groq("llama-3.2-11b-vision-preview"),
+                model: groq("llama-3.2-90b-vision-preview"),
                 messages: [
                     {
                         role: "user",
