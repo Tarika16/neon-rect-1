@@ -83,6 +83,10 @@ export default function DocumentsPage() {
         const userMessage = input;
         setInput("");
         setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+
+        // Add placeholder for AI response
+        const aiMessageId = Date.now().toString();
+        setMessages((prev) => [...prev, { role: "ai", content: "" }]);
         setLoading(true);
 
         try {
@@ -92,12 +96,49 @@ export default function DocumentsPage() {
                 body: JSON.stringify({ documentId: selectedDoc.id, question: userMessage }),
             });
 
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Failed");
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Failed context processing");
+            }
 
-            setMessages((prev) => [...prev, { role: "ai", content: data.answer }]);
-        } catch (error) {
-            setMessages((prev) => [...prev, { role: "ai", content: "⚠️ Error: Could not generate answer. Check API Key." }]);
+            if (!res.body) return;
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedContent = "";
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const text = decoder.decode(value, { stream: true });
+                    accumulatedContent += text;
+
+                    setMessages(prev => {
+                        const newMsgs = [...prev];
+                        const lastMsg = newMsgs[newMsgs.length - 1];
+                        if (lastMsg.role === "ai") {
+                            lastMsg.content = accumulatedContent;
+                        }
+                        return newMsgs;
+                    });
+                }
+            } catch (streamError: any) {
+                console.error("Stream error:", streamError);
+                throw new Error(`Connection lost: ${streamError.message}`);
+            }
+
+        } catch (error: any) {
+            console.error("Chat Error:", error);
+            setMessages((prev) => {
+                const newMsgs = [...prev];
+                const lastMsg = newMsgs[newMsgs.length - 1];
+                if (lastMsg.role === "ai") {
+                    lastMsg.content = `⚠️ Error: ${error.message || "Could not generate answer."}`;
+                }
+                return newMsgs;
+            });
         } finally {
             setLoading(false);
         }

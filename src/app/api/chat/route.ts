@@ -21,13 +21,13 @@ export async function POST(req: Request) {
             return new Response("Unauthorized", { status: 401 });
         }
 
-        const { workspaceId, question, includeWebSearch } = await req.json();
+        const { workspaceId, documentId, question, includeWebSearch } = await req.json();
 
-        if (!question || !workspaceId) {
-            return new Response("Missing question or workspaceId", { status: 400 });
+        if (!question || (!workspaceId && !documentId)) {
+            return new Response("Missing question, workspaceId or documentId", { status: 400 });
         }
 
-        console.log(`Chat: Processing question "${question}" for workspace ${workspaceId}`);
+        console.log(`Chat: Processing question "${question}" for ${workspaceId ? `workspace ${workspaceId}` : `document ${documentId}`}`);
 
         // 1. Generate Query Embedding
         console.time("Chat: Embedding");
@@ -46,20 +46,37 @@ export async function POST(req: Request) {
         console.time("Chat: VectorSearch");
         let vectorResults: any[] = [];
         try {
-            vectorResults = await prisma.$queryRaw`
-                SELECT 
-                    chunk.id,
-                    chunk.content,
-                    chunk.metadata,
-                    doc.title as "docTitle",
-                    1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
-                FROM "DocumentChunk" chunk
-                JOIN "Document" doc ON chunk."documentId" = doc.id
-                WHERE doc."workspaceId" = ${workspaceId}
-                AND doc."userId" = ${session.user.id}
-                ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
-                LIMIT 5;
-            `;
+            if (workspaceId) {
+                vectorResults = await prisma.$queryRaw`
+                    SELECT 
+                        chunk.id,
+                        chunk.content,
+                        chunk.metadata,
+                        doc.title as "docTitle",
+                        1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
+                    FROM "DocumentChunk" chunk
+                    JOIN "Document" doc ON chunk."documentId" = doc.id
+                    WHERE doc."workspaceId" = ${workspaceId}
+                    AND doc."userId" = ${session.user.id}
+                    ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
+                    LIMIT 5;
+                `;
+            } else if (documentId) {
+                vectorResults = await prisma.$queryRaw`
+                    SELECT 
+                        chunk.id,
+                        chunk.content,
+                        chunk.metadata,
+                        doc.title as "docTitle",
+                        1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
+                    FROM "DocumentChunk" chunk
+                    JOIN "Document" doc ON chunk."documentId" = doc.id
+                    WHERE doc."id" = ${documentId}
+                    AND doc."userId" = ${session.user.id}
+                    ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
+                    LIMIT 5;
+                `;
+            }
             console.timeEnd("Chat: VectorSearch");
         } catch (vectorError: any) {
             console.error("Chat: Vector Search failed:", vectorError);
