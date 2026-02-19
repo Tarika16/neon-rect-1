@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 
 interface Document {
     id: string;
@@ -26,6 +27,7 @@ interface Analytics {
     documentCount: number;
     totalChunks: number;
     totalWords: number;
+    activityData: { date: string, count: number }[];
 }
 
 export default function WorkspaceDetailPage() {
@@ -44,6 +46,7 @@ export default function WorkspaceDetailPage() {
     const [deepSearch, setDeepSearch] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [activeTab, setActiveTab] = useState<"documents" | "insights">("documents");
 
     // Document Reader State
     const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
@@ -457,41 +460,107 @@ export default function WorkspaceDetailPage() {
                         </div>
                     )}
 
+                    {/* Sidebar Tabs */}
+                    <div className="flex gap-1 p-1 bg-white/5 rounded-xl mb-4">
+                        <button
+                            onClick={() => setActiveTab("documents")}
+                            className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${activeTab === "documents" ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-gray-300"}`}
+                        >
+                            Documents
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("insights")}
+                            className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition-all ${activeTab === "insights" ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-gray-300"}`}
+                        >
+                            Insights
+                        </button>
+                    </div>
+
                     <div className="flex-1 overflow-y-auto space-y-2 pr-2 mb-12 custom-scrollbar">
-                        {documents.length === 0 && (
-                            <p className="text-gray-400 text-center mt-10 text-sm">No documents in this workspace.</p>
-                        )}
-                        {documents.map((doc) => (
-                            <div
-                                key={doc.id}
-                                onClick={() => handleSelectDoc(doc.id)}
-                                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 group ${selectedDocId === doc.id
-                                    ? "bg-purple-500/10 border-purple-500"
-                                    : "bg-white/5 border-white/10 hover:border-white/20"
-                                    }`}
-                            >
-                                <FileText size={16} className={selectedDocId === doc.id ? "text-purple-400" : "text-gray-400"} />
-                                <div className="flex-1 truncate">
-                                    <p className={`font-medium truncate text-sm ${selectedDocId === doc.id ? "text-white" : "text-gray-300 group-hover:text-white"}`}>
-                                        {doc.title}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    {selectedDocId === doc.id ? (
-                                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse mr-1" />
-                                    ) : (
-                                        <CheckCircle size={14} className="text-green-500/30 group-hover:text-green-500/50 mr-1" />
-                                    )}
-                                    <button
-                                        onClick={(e) => handleDeleteDocument(e, doc.id)}
-                                        className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                                        title="Delete document"
+                        {activeTab === "documents" ? (
+                            <>
+                                {documents.length === 0 && (
+                                    <p className="text-gray-400 text-center mt-10 text-sm">No documents in this workspace.</p>
+                                )}
+                                {documents.map((doc) => (
+                                    <div
+                                        key={doc.id}
+                                        onClick={() => handleSelectDoc(doc.id)}
+                                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2 group ${selectedDocId === doc.id
+                                            ? "bg-purple-500/10 border-purple-500"
+                                            : "bg-white/5 border-white/10 hover:border-white/20"
+                                            }`}
                                     >
-                                        <Trash2 size={14} />
-                                    </button>
+                                        <FileText size={16} className={selectedDocId === doc.id ? "text-purple-400" : "text-gray-400"} />
+                                        <div className="flex-1 truncate">
+                                            <p className={`font-medium truncate text-sm ${selectedDocId === doc.id ? "text-white" : "text-gray-300 group-hover:text-white"}`}>
+                                                {doc.title}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {selectedDocId === doc.id ? (
+                                                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse mr-1" />
+                                            ) : (
+                                                <CheckCircle size={14} className="text-green-500/30 group-hover:text-green-500/50 mr-1" />
+                                            )}
+                                            <button
+                                                onClick={(e) => handleDeleteDocument(e, doc.id)}
+                                                className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                title="Delete document"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </>
+                        ) : (
+                            <div className="space-y-6 animate-fade-in">
+                                <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                                    <h4 className="text-xs font-semibold text-gray-400 mb-4 uppercase tracking-wider">Message Activity (7d)</h4>
+                                    <div className="h-[150px] w-full">
+                                        {analytics?.activityData && analytics.activityData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <LineChart data={analytics.activityData}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                                                    <XAxis
+                                                        dataKey="date"
+                                                        hide
+                                                    />
+                                                    <YAxis hide domain={[0, 'auto']} />
+                                                    <Tooltip
+                                                        contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '10px' }}
+                                                        itemStyle={{ color: '#4ade80' }}
+                                                        labelStyle={{ color: '#888' }}
+                                                    />
+                                                    <Line
+                                                        type="monotone"
+                                                        dataKey="count"
+                                                        stroke="#4ade80"
+                                                        strokeWidth={2}
+                                                        dot={{ r: 3, fill: '#4ade80' }}
+                                                        activeDot={{ r: 5 }}
+                                                    />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div className="h-full flex items-center justify-center text-[10px] text-gray-600">No activity data yet</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col justify-center">
+                                        <span className="text-[10px] text-gray-500 uppercase">Documents</span>
+                                        <span className="text-xl font-bold text-blue-400">{analytics?.documentCount || 0}</span>
+                                    </div>
+                                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col justify-center">
+                                        <span className="text-[10px] text-gray-500 uppercase">Total Items</span>
+                                        <span className="text-xl font-bold text-purple-400">{analytics?.totalChunks || 0}</span>
+                                    </div>
                                 </div>
                             </div>
-                        ))}
+                        )}
                     </div>
 
                     {/* Sidebar Footer: Stats & Delete */}

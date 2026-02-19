@@ -32,8 +32,10 @@ export async function POST(req: Request) {
 
         const isPdf = file.type.includes("pdf") || file.name.toLowerCase().endsWith(".pdf");
         const isText = file.type.includes("text") || file.name.toLowerCase().endsWith(".txt");
+        const isDocx = file.type.includes("wordprocessingml.document") || file.name.toLowerCase().endsWith(".docx");
+        const isCsv = file.type.includes("csv") || file.name.toLowerCase().endsWith(".csv") || file.type.includes("excel");
 
-        if (!isPdf && !isText) {
+        if (!isPdf && !isText && !isDocx && !isCsv) {
             return NextResponse.json({ error: `Unsupported file type: ${file.type} (${file.name})` }, { status: 400 });
         }
 
@@ -57,6 +59,33 @@ export async function POST(req: Request) {
                 return NextResponse.json({
                     error: `Failed to parse PDF: ${pdfError.message || "Unknown error"}. (Filename: ${file.name})`
                 }, { status: 500 });
+            }
+        } else if (isDocx) {
+            try {
+                const mammoth = await import("mammoth");
+                const result = await mammoth.extractRawText({ buffer });
+                content = result.value;
+                console.log("Upload: DOCX parsed via mammoth, length:", content.length);
+            } catch (docxError: any) {
+                console.error("Upload: DOCX Parse Error", docxError);
+                return NextResponse.json({ error: `Failed to parse Word document: ${docxError.message}` }, { status: 500 });
+            }
+        } else if (isCsv) {
+            try {
+                const Papa = await import("papaparse");
+                const csvString = buffer.toString("utf-8");
+                const result = Papa.parse(csvString, {
+                    header: true,
+                    skipEmptyLines: true
+                });
+                // Flatten CSV to searchable text
+                content = result.data.map((row: any) =>
+                    Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(", ")
+                ).join("\n");
+                console.log("Upload: CSV parsed via papaparse, rows:", result.data.length);
+            } catch (csvError: any) {
+                console.error("Upload: CSV Parse Error", csvError);
+                return NextResponse.json({ error: `Failed to parse CSV: ${csvError.message}` }, { status: 500 });
             }
         } else {
             content = buffer.toString("utf-8");
@@ -94,7 +123,7 @@ export async function POST(req: Request) {
 
                 // Workaround for Unsupported type in Prisma:
                 // We create the chunk first, then update it with raw SQL for the vector
-                const chunk = await prisma.documentChunk.create({
+                const chunk = await (prisma as any).documentChunk.create({
                     data: {
                         content: chunkContent,
                         documentId: doc.id,
