@@ -268,18 +268,21 @@ After your answer, provide exactly 3 suggested follow-up questions starting with
             },
         });
 
-        // Wrap response to include sources metadata
+        // Wrap response to include sources metadata using a unique separator
         const stream = result.textStream;
+        const encoder = new TextEncoder();
         const readableStream = new ReadableStream({
             async start(controller) {
                 const reader = stream.getReader();
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    controller.enqueue(value);
+                    controller.enqueue(encoder.encode(value));
                 }
-                // Append Sources
-                controller.enqueue(`\n\n__SOURCES_METADATA__\n${JSON.stringify(sources)}`);
+                // Append sources with a unique delimiter that can't appear in LLM output
+                if (sources.length > 0) {
+                    controller.enqueue(encoder.encode(`\n\n<<<SOURCES_JSON>>>${JSON.stringify(sources)}<<<END_SOURCES>>>`));
+                }
                 controller.close();
             },
         });

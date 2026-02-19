@@ -1,0 +1,16 @@
+=== RAG DIAGNOSTIC ===
+
+--- Documents (latest 10) ---
+
+--- Stored Embedding Dimensions ---
+  !! NO CHUNKS WITH EMBEDDINGS FOUND !!
+
+--- Embedding Coverage ---
+  Total chunks: 0
+  With embeddings: 0
+  NULL embeddings: 0
+
+--- API Key Status ---
+  OPENAI_API_KEY: sk-or-v1-c... (OpenRouter)
+  GROQ_API_KEY: gsk_aklXKG...
+  FIRECRAWL_API_KEY: MISSING (Deep Search will not work!)

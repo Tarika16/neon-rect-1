@@ -308,14 +308,25 @@ export default function WorkspaceDetailPage() {
                     let parsedSources = [];
                     let cleanContent = accumulatedContent;
 
-                    if (accumulatedContent.includes("__SOURCES_METADATA__")) {
-                        const parts = accumulatedContent.split("__SOURCES_METADATA__");
+                    // Strip new format: <<<SOURCES_JSON>>>...<<<END_SOURCES>>>
+                    const newSourceMatch = cleanContent.match(/<<<SOURCES_JSON>>>([\s\S]*?)<<<END_SOURCES>>>/);
+                    if (newSourceMatch) {
+                        try { parsedSources = JSON.parse(newSourceMatch[1]); } catch (e) { }
+                        cleanContent = cleanContent.replace(/<<<SOURCES_JSON>>>[\s\S]*?<<<END_SOURCES>>>/, "").trim();
+                    }
+
+                    // Strip old format: __SOURCES_METADATA__...
+                    if (cleanContent.includes("__SOURCES_METADATA__")) {
+                        const parts = cleanContent.split("__SOURCES_METADATA__");
                         cleanContent = parts[0].trim();
-                        try {
-                            parsedSources = JSON.parse(parts[1].trim());
-                        } catch (e) {
-                            console.error("Failed to parse sources", e);
+                        if (!parsedSources.length && parts[1]) {
+                            try { parsedSources = JSON.parse(parts[1].trim()); } catch (e) { }
                         }
+                    }
+
+                    // Strip bare SOURCES_METADATA (seen in production)
+                    if (cleanContent.includes("SOURCES_METADATA")) {
+                        cleanContent = cleanContent.split("SOURCES_METADATA")[0].trim();
                     }
 
                     // Parse suggested questions

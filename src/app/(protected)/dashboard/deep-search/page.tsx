@@ -20,6 +20,47 @@ interface Message {
     suggestions?: string[];
 }
 
+function stripMetadata(text: string): { cleanText: string; sources: Source[]; suggestions: string[] } {
+    let cleanText = text;
+    let sources: Source[] = [];
+    let suggestions: string[] = [];
+
+    // Strip new format: <<<SOURCES_JSON>>>...<<<END_SOURCES>>>
+    const newMatch = cleanText.match(/<<<SOURCES_JSON>>>([\s\S]*?)<<<END_SOURCES>>>/);
+    if (newMatch) {
+        try { sources = JSON.parse(newMatch[1]); } catch { }
+        cleanText = cleanText.replace(/<<<SOURCES_JSON>>>[\s\S]*?<<<END_SOURCES>>>/, "").trim();
+    }
+
+    // Strip old format: __SOURCES_METADATA__...
+    if (cleanText.includes("__SOURCES_METADATA__")) {
+        const parts = cleanText.split("__SOURCES_METADATA__");
+        cleanText = parts[0].trim();
+        if (!sources.length && parts[1]) {
+            try { sources = JSON.parse(parts[1].trim()); } catch { }
+        }
+    }
+
+    // Also strip any raw SOURCES_METADATA without underscores (seen in production)
+    if (cleanText.includes("SOURCES_METADATA")) {
+        cleanText = cleanText.split("SOURCES_METADATA")[0].trim();
+    }
+
+    // Strip suggested questions
+    if (cleanText.includes("SUGGESTED_QUESTIONS:")) {
+        const parts = cleanText.split("SUGGESTED_QUESTIONS:");
+        cleanText = parts[0].trim();
+        if (parts[1]) {
+            suggestions = parts[1]
+                .split("\n")
+                .map(s => s.replace(/^\d+\.\s*/, "").replace(/^-\s*/, "").trim())
+                .filter(s => s.length > 5);
+        }
+    }
+
+    return { cleanText, sources, suggestions };
+}
+
 export default function DeepSearchPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
@@ -73,41 +114,19 @@ export default function DeepSearchPage() {
                 const text = decoder.decode(value, { stream: true });
                 accumulatedContent += text;
 
-                // Strip sources metadata and suggested questions from display
-                let displayContent = accumulatedContent;
-                let sources: Source[] = [];
-                let suggestions: string[] = [];
-
-                if (displayContent.includes("__SOURCES_METADATA__")) {
-                    const parts = displayContent.split("__SOURCES_METADATA__");
-                    displayContent = parts[0].trim();
-                    try {
-                        sources = JSON.parse(parts[1].trim());
-                    } catch { }
-                }
-
-                if (displayContent.includes("SUGGESTED_QUESTIONS:")) {
-                    const parts = displayContent.split("SUGGESTED_QUESTIONS:");
-                    displayContent = parts[0].trim();
-                    if (parts[1]) {
-                        suggestions = parts[1]
-                            .split("\n")
-                            .map(s => s.replace(/^\d+\.\s*/, "").trim())
-                            .filter(s => s.length > 5);
-                    }
-                }
+                // Clean the content for display
+                const { cleanText, sources, suggestions } = stripMetadata(accumulatedContent);
 
                 setMessages(prev => {
                     const newMsgs = [...prev];
                     const lastMsg = newMsgs[newMsgs.length - 1];
                     if (lastMsg && lastMsg.role === "ai") {
-                        return [...newMsgs.slice(0, -1), { ...lastMsg, content: displayContent, sources, suggestions }];
+                        return [...newMsgs.slice(0, -1), { ...lastMsg, content: cleanText, sources, suggestions }];
                     }
                     return newMsgs;
                 });
 
-                // Clear search phase once content arrives
-                if (displayContent.length > 20) setSearchPhase("");
+                if (cleanText.length > 20) setSearchPhase("");
             }
 
         } catch (error: any) {
@@ -149,7 +168,7 @@ export default function DeepSearchPage() {
                             <div className="max-w-md">
                                 <h3 className="text-xl font-bold text-white mb-2">Deep Search</h3>
                                 <p className="text-gray-400 text-sm leading-relaxed">
-                                    Ask any question — I'll search your uploaded documents and crawl the web for the latest information.
+                                    Ask any question — I&apos;ll search your uploaded documents and the web for answers.
                                 </p>
                             </div>
                             <div className="flex gap-3 text-xs">
@@ -241,7 +260,7 @@ export default function DeepSearchPage() {
                     <div className="relative flex-1">
                         <input
                             className="input-field w-full py-3 pl-11 pr-4"
-                            placeholder="Ask anything — I'll search documents and the web..."
+                            placeholder="Ask anything — searches documents and the web..."
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={loading}

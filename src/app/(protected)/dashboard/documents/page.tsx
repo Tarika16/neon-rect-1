@@ -11,10 +11,51 @@ interface Document {
     createdAt: string;
 }
 
+interface Source {
+    id: number;
+    type: string;
+    title: string;
+    url?: string;
+    content?: string;
+}
+
 interface ChatMessage {
     role: "user" | "ai";
     content: string;
-    sources?: any[];
+    sources?: Source[];
+}
+
+function stripMetadata(text: string): { cleanText: string; sources: Source[] } {
+    let cleanText = text;
+    let sources: Source[] = [];
+
+    // Strip new format: <<<SOURCES_JSON>>>...<<<END_SOURCES>>>
+    const newMatch = cleanText.match(/<<<SOURCES_JSON>>>([\s\S]*?)<<<END_SOURCES>>>/);
+    if (newMatch) {
+        try { sources = JSON.parse(newMatch[1]); } catch { }
+        cleanText = cleanText.replace(/<<<SOURCES_JSON>>>[\s\S]*?<<<END_SOURCES>>>/, "").trim();
+    }
+
+    // Strip old format: __SOURCES_METADATA__...
+    if (cleanText.includes("__SOURCES_METADATA__")) {
+        const parts = cleanText.split("__SOURCES_METADATA__");
+        cleanText = parts[0].trim();
+        if (!sources.length && parts[1]) {
+            try { sources = JSON.parse(parts[1].trim()); } catch { }
+        }
+    }
+
+    // Also strip any raw SOURCES_METADATA without underscores
+    if (cleanText.includes("SOURCES_METADATA")) {
+        cleanText = cleanText.split("SOURCES_METADATA")[0].trim();
+    }
+
+    // Strip suggested questions
+    if (cleanText.includes("SUGGESTED_QUESTIONS:")) {
+        cleanText = cleanText.split("SUGGESTED_QUESTIONS:")[0].trim();
+    }
+
+    return { cleanText, sources };
 }
 
 export default function DocumentsPage() {
@@ -142,29 +183,14 @@ export default function DocumentsPage() {
                 const text = decoder.decode(value, { stream: true });
                 accumulatedContent += text;
 
-                // Strip sources metadata from display
-                let displayContent = accumulatedContent;
-                if (displayContent.includes("__SOURCES_METADATA__")) {
-                    displayContent = displayContent.split("__SOURCES_METADATA__")[0].trim();
-                }
-                // Strip suggested questions from display
-                if (displayContent.includes("SUGGESTED_QUESTIONS:")) {
-                    displayContent = displayContent.split("SUGGESTED_QUESTIONS:")[0].trim();
-                }
+                // Clean the content — strip all metadata
+                const { cleanText, sources } = stripMetadata(accumulatedContent);
 
                 setMessages(prev => {
                     const newMsgs = [...prev];
                     const lastMsg = newMsgs[newMsgs.length - 1];
                     if (lastMsg && lastMsg.role === "ai") {
-                        // Parse sources if available
-                        let sources: any[] = [];
-                        if (accumulatedContent.includes("__SOURCES_METADATA__")) {
-                            try {
-                                const metaPart = accumulatedContent.split("__SOURCES_METADATA__")[1].trim();
-                                sources = JSON.parse(metaPart);
-                            } catch { }
-                        }
-                        return [...newMsgs.slice(0, -1), { ...lastMsg, content: displayContent, sources }];
+                        return [...newMsgs.slice(0, -1), { ...lastMsg, content: cleanText, sources }];
                     }
                     return newMsgs;
                 });
@@ -301,7 +327,7 @@ export default function DocumentsPage() {
                                             {/* Sources */}
                                             {m.sources && m.sources.length > 0 && (
                                                 <div className="mt-2 flex flex-wrap gap-1.5">
-                                                    {m.sources.map((s: any, idx: number) => (
+                                                    {m.sources.map((s, idx) => (
                                                         <span key={idx} className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300">
                                                             [{s.id}] {s.title?.slice(0, 30)}
                                                         </span>
@@ -311,20 +337,6 @@ export default function DocumentsPage() {
                                         </div>
                                     </div>
                                 ))}
-                                {loading && messages.length > 0 && messages[messages.length - 1].content && (
-                                    <div className="flex gap-3">
-                                        <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-emerald-500 to-teal-600">
-                                            <Bot size={14} className="text-white" />
-                                        </div>
-                                        <div className="bg-white/5 px-4 py-3 rounded-2xl rounded-tl-none border border-white/10 flex items-center gap-2">
-                                            <div className="flex gap-1">
-                                                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                                 <div ref={endRef} />
                             </div>
 
