@@ -29,18 +29,24 @@ async function getPipeline() {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-    // Priority 1: OpenAI Embedding (Fastest & most reliable on Vercel)
-    if (process.env.OPENAI_API_KEY) {
+    // Priority 1: OpenAI/OpenRouter Embedding (Fastest & most reliable on Vercel)
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (apiKey) {
         try {
-            const response = await fetch("https://api.openai.com/v1/embeddings", {
+            const isOpenRouter = apiKey.startsWith("sk-or-");
+            const baseUrl = isOpenRouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1";
+            const model = isOpenRouter ? "openai/text-embedding-3-small" : "text-embedding-3-small";
+
+            const response = await fetch(`${baseUrl}/embeddings`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+                    "Authorization": `Bearer ${apiKey}`,
+                    ...(isOpenRouter && { "HTTP-Referer": "https://neon-admin-dashboard.vercel.app", "X-Title": "NeonBoard" })
                 },
                 body: JSON.stringify({
                     input: text,
-                    model: "text-embedding-3-small"
+                    model: model
                 })
             });
             const result = await response.json();
