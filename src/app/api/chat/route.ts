@@ -18,6 +18,7 @@ export async function POST(req: Request) {
         }
 
         const { workspaceId, documentId, question, includeWebSearch } = await req.json();
+        const userId = session.user.id as string;
 
         if (!question || (!workspaceId && !documentId)) {
             return new Response("Missing question, workspaceId or documentId", { status: 400 });
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
                     FROM "DocumentChunk" chunk
                     JOIN "Document" doc ON chunk."documentId" = doc.id
                     WHERE doc."workspaceId" = ${workspaceId}
-                    AND doc."userId" = ${session.user.id}
+                    AND doc."userId" = ${userId}
                     ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
                     LIMIT 5;
                 `;
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
                     FROM "DocumentChunk" chunk
                     JOIN "Document" doc ON chunk."documentId" = doc.id
                     WHERE doc."id" = ${documentId}
-                    AND doc."userId" = ${session.user.id}
+                    AND doc."userId" = ${userId}
                     ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
                     LIMIT 5;
                 `;
@@ -165,7 +166,7 @@ export async function POST(req: Request) {
                             role: "assistant",
                             content: event.text,
                             workspaceId: wsId,
-                            userId: session.user.id,
+                            userId: userId,
                         },
                     });
                 } catch (dbError) {
