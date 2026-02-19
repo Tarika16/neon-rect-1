@@ -20,8 +20,8 @@ export async function POST(req: Request) {
         const { workspaceId, documentId, question, includeWebSearch } = await req.json();
         const userId = session.user.id as string;
 
-        if (!question || (!workspaceId && !documentId)) {
-            return new Response("Missing question, workspaceId or documentId", { status: 400 });
+        if (!question) {
+            return new Response("Missing question", { status: 400 });
         }
 
         console.log(`Chat: Processing question "${question}" for ${workspaceId ? `workspace ${workspaceId}` : `document ${documentId}`}`);
@@ -70,6 +70,21 @@ export async function POST(req: Request) {
                     JOIN "Document" doc ON chunk."documentId" = doc.id
                     WHERE doc."id" = ${documentId}
                     AND doc."userId" = ${userId}
+                    ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
+                    LIMIT 5;
+                `;
+            } else {
+                // Global Search across all documents
+                vectorResults = await prisma.$queryRaw`
+                    SELECT 
+                        chunk.id,
+                        chunk.content,
+                        chunk.metadata,
+                        doc.title as "docTitle",
+                        1 - (chunk.embedding <=> ${queryEmbedding}::vector) as similarity
+                    FROM "DocumentChunk" chunk
+                    JOIN "Document" doc ON chunk."documentId" = doc.id
+                    WHERE doc."userId" = ${userId}
                     ORDER BY chunk.embedding <=> ${queryEmbedding}::vector
                     LIMIT 5;
                 `;

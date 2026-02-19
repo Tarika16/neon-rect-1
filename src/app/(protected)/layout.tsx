@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, Users, Shield, LogOut, FileText, Layers } from "lucide-react";
+import { LayoutDashboard, Users, Shield, LogOut, FileText, Layers, Globe } from "lucide-react";
 import { SignOutButton } from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +45,10 @@ export default async function DashboardLayout({
                     <Link href="/dashboard/workspaces" className="sidebar-link">
                         <Layers size={18} />
                         Workspaces
+                    </Link>
+                    <Link href="/dashboard/deep-search" className="sidebar-link">
+                        <Globe size={18} />
+                        Deep Search
                     </Link>
                 </nav>
 
