@@ -1,20 +1,30 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, Globe, FileText, Send, Loader2, BookOpen, ExternalLink, Sparkles } from "lucide-react";
+import { Search, Globe, Send, Loader2, Bot, User, Sparkles, ExternalLink } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+interface Source {
+    id: number;
+    type: "document" | "web";
+    title: string;
+    url?: string;
+    content?: string;
+}
 
 interface Message {
     role: "user" | "ai";
     content: string;
-    sources?: any[];
+    sources?: Source[];
+    suggestions?: string[];
 }
 
 export default function DeepSearchPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState<string>("");
+    const [searchPhase, setSearchPhase] = useState("");
     const endRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -29,24 +39,22 @@ export default function DeepSearchPage() {
         setInput("");
         setMessages(prev => [...prev, { role: "user", content: userMessage }]);
         setLoading(true);
-        setStatus("🔍 Analyzing query...");
+        setSearchPhase("Searching documents & web...");
 
         try {
-            // We use a modified version of the chat API that handles global search
-            setStatus("📂 Searching internal documents...");
-
             const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     question: userMessage,
                     includeWebSearch: true,
-                    // Note: Not passing documentId/workspaceId means global search if we update the API
-                    // For now, our API expects one of them. We'll use a workaround or check most recent.
                 }),
             });
 
-            if (!res.ok) throw new Error("Search failed. Check API Keys.");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Search failed. Please try again.");
+            }
 
             const reader = res.body?.getReader();
             const decoder = new TextDecoder();
@@ -54,10 +62,9 @@ export default function DeepSearchPage() {
 
             if (!reader) throw new Error("No response body");
 
-            setStatus("🌐 Fetching web data (Deep Search)...");
-
-            // Initial AI message placeholder
+            // Add empty AI message for streaming
             setMessages(prev => [...prev, { role: "ai", content: "" }]);
+            setSearchPhase("Generating answer...");
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -66,25 +73,49 @@ export default function DeepSearchPage() {
                 const text = decoder.decode(value, { stream: true });
                 accumulatedContent += text;
 
+                // Strip sources metadata and suggested questions from display
+                let displayContent = accumulatedContent;
+                let sources: Source[] = [];
+                let suggestions: string[] = [];
+
+                if (displayContent.includes("__SOURCES_METADATA__")) {
+                    const parts = displayContent.split("__SOURCES_METADATA__");
+                    displayContent = parts[0].trim();
+                    try {
+                        sources = JSON.parse(parts[1].trim());
+                    } catch { }
+                }
+
+                if (displayContent.includes("SUGGESTED_QUESTIONS:")) {
+                    const parts = displayContent.split("SUGGESTED_QUESTIONS:");
+                    displayContent = parts[0].trim();
+                    if (parts[1]) {
+                        suggestions = parts[1]
+                            .split("\n")
+                            .map(s => s.replace(/^\d+\.\s*/, "").trim())
+                            .filter(s => s.length > 5);
+                    }
+                }
+
                 setMessages(prev => {
                     const newMsgs = [...prev];
                     const lastMsg = newMsgs[newMsgs.length - 1];
                     if (lastMsg && lastMsg.role === "ai") {
-                        return [...newMsgs.slice(0, -1), { ...lastMsg, content: accumulatedContent }];
+                        return [...newMsgs.slice(0, -1), { ...lastMsg, content: displayContent, sources, suggestions }];
                     }
                     return newMsgs;
                 });
 
-                // Once we start getting text, we clear the status
-                if (accumulatedContent.length > 10) setStatus("");
+                // Clear search phase once content arrives
+                if (displayContent.length > 20) setSearchPhase("");
             }
 
         } catch (error: any) {
-            console.error(error);
-            setMessages(prev => [...prev, { role: "ai", content: `❌ Error: ${error.message}` }]);
+            console.error("Deep Search Error:", error);
+            setMessages(prev => [...prev, { role: "ai", content: `Sorry, something went wrong: ${error.message}` }]);
         } finally {
             setLoading(false);
-            setStatus("");
+            setSearchPhase("");
         }
     };
 
@@ -93,54 +124,110 @@ export default function DeepSearchPage() {
             <div className="page-header flex justify-between items-center">
                 <div>
                     <h1 className="flex items-center gap-3">
-                        <Sparkles className="text-yellow-400 animate-pulse" />
+                        <Sparkles className="text-yellow-400" />
                         Deep Search
                     </h1>
-                    <p className="text-gray-400">Combined AI research across documents and the entire web.</p>
+                    <p className="text-gray-400 text-sm">AI-powered research across your documents and the web</p>
                 </div>
             </div>
 
-            <div className="flex-1 glass-card mt-6 flex flex-col overflow-hidden relative">
-                {/* Status Overlay */}
-                {status && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 text-white px-6 py-2 rounded-full shadow-2xl flex items-center gap-3 animate-bounce border border-purple-400">
-                        <Loader2 className="animate-spin" size={18} />
-                        <span className="font-bold text-sm uppercase tracking-tighter">{status}</span>
+            <div className="flex-1 glass-card mt-4 flex flex-col overflow-hidden relative">
+                {/* Search Phase Indicator */}
+                {searchPhase && (
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 backdrop-blur-sm text-white px-5 py-2 rounded-full shadow-lg flex items-center gap-2 border border-purple-400/30">
+                        <Loader2 className="animate-spin" size={14} />
+                        <span className="font-medium text-xs">{searchPhase}</span>
                     </div>
                 )}
 
-                <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar bg-black/40">
+                <div className="flex-1 p-5 overflow-y-auto space-y-5 custom-scrollbar">
                     {messages.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-60">
-                            <div className="p-8 bg-purple-500/10 rounded-full border-2 border-purple-500/20">
-                                <Globe size={80} className="text-purple-400" />
+                        <div className="h-full flex flex-col items-center justify-center text-center space-y-5 opacity-70">
+                            <div className="p-6 bg-purple-500/10 rounded-full border border-purple-500/20">
+                                <Globe size={56} className="text-purple-400" />
                             </div>
                             <div className="max-w-md">
-                                <h3 className="text-2xl font-black text-white mb-2">Ready for Deep Research?</h3>
-                                <p className="text-gray-400">Ask any complex question. I'll search your uploaded documents and crawl the web for the latest information using Firecrawl.</p>
+                                <h3 className="text-xl font-bold text-white mb-2">Deep Search</h3>
+                                <p className="text-gray-400 text-sm leading-relaxed">
+                                    Ask any question — I'll search your uploaded documents and crawl the web for the latest information.
+                                </p>
                             </div>
-                            <div className="grid grid-cols-2 gap-4 text-xs font-bold uppercase">
-                                <div className="p-3 bg-white/5 rounded-xl border border-white/10">📂 Doc Knowledge</div>
-                                <div className="p-3 bg-white/5 rounded-xl border border-white/10">🌐 Real-time Web</div>
+                            <div className="flex gap-3 text-xs">
+                                <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
+                                    <span className="text-purple-400">📂</span> Documents
+                                </div>
+                                <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
+                                    <span className="text-blue-400">🌐</span> Live Web
+                                </div>
+                                <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
+                                    <span className="text-green-400">🤖</span> AI Analysis
+                                </div>
                             </div>
                         </div>
                     ) : (
                         messages.map((m, i) => (
-                            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                                <div className={`max-w-[90%] p-6 rounded-3xl text-sm leading-relaxed shadow-2xl ${m.role === "user"
-                                    ? "bg-purple-600 text-white rounded-tr-none"
-                                    : "bg-gray-800/80 text-white border-2 border-white/10 rounded-tl-none backdrop-blur-md"
+                            <div key={i} className={`flex gap-3 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${m.role === "user"
+                                    ? "bg-gradient-to-br from-purple-500 to-indigo-600"
+                                    : "bg-gradient-to-br from-emerald-500 to-teal-600"
                                     }`}>
-                                    <div className="prose prose-invert max-w-none">
-                                        <ReactMarkdown>
-                                            {m.content}
-                                        </ReactMarkdown>
+                                    {m.role === "user" ? <User size={15} className="text-white" /> : <Bot size={15} className="text-white" />}
+                                </div>
+                                <div className="max-w-[85%]">
+                                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${m.role === "user"
+                                        ? "bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-tr-none"
+                                        : "bg-white/5 text-gray-200 border border-white/10 rounded-tl-none backdrop-blur-sm"
+                                        }`}>
+                                        {m.content ? (
+                                            <div className="prose prose-invert prose-sm max-w-none">
+                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                    {m.content}
+                                                </ReactMarkdown>
+                                            </div>
+                                        ) : (
+                                            loading && i === messages.length - 1 && (
+                                                <div className="flex items-center gap-2 text-emerald-400">
+                                                    <Loader2 className="animate-spin" size={14} />
+                                                    <span className="text-xs">Researching...</span>
+                                                </div>
+                                            )
+                                        )}
                                     </div>
 
-                                    {loading && i === messages.length - 1 && m.role === "ai" && !m.content && (
-                                        <div className="flex items-center gap-3 text-purple-400">
-                                            <Loader2 className="animate-spin" size={20} />
-                                            <span className="font-bold animate-pulse">Consulting all sources...</span>
+                                    {/* Sources */}
+                                    {m.sources && m.sources.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {m.sources.map((s, idx) => (
+                                                <a
+                                                    key={idx}
+                                                    href={s.url || "#"}
+                                                    target={s.url ? "_blank" : undefined}
+                                                    rel="noopener noreferrer"
+                                                    className={`text-[10px] px-2 py-1 rounded-md flex items-center gap-1 transition-all ${s.type === "web"
+                                                        ? "bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/20"
+                                                        : "bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20"
+                                                        }`}
+                                                >
+                                                    {s.type === "web" ? <Globe size={10} /> : <span>📄</span>}
+                                                    [{s.id}] {s.title?.slice(0, 35)}{s.title && s.title.length > 35 ? "..." : ""}
+                                                    {s.url && <ExternalLink size={8} />}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Suggested Questions */}
+                                    {m.suggestions && m.suggestions.length > 0 && (
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            {m.suggestions.map((s, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setInput(s)}
+                                                    className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs hover:bg-emerald-500/20 transition-all text-left max-w-full font-medium"
+                                                >
+                                                    {s}
+                                                </button>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
@@ -150,24 +237,24 @@ export default function DeepSearchPage() {
                     <div ref={endRef} />
                 </div>
 
-                <form onSubmit={handleSearch} className="p-6 border-t-2 border-white/10 bg-white/5 flex gap-4">
+                <form onSubmit={handleSearch} className="p-4 border-t border-white/10 bg-white/5 flex gap-3">
                     <div className="relative flex-1">
                         <input
-                            className="input-field w-full text-lg py-5 pl-14 pr-6 focus:ring-4 ring-purple-500/20 transition-all"
-                            placeholder="What would you like to research today?"
+                            className="input-field w-full py-3 pl-11 pr-4"
+                            placeholder="Ask anything — I'll search documents and the web..."
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={loading}
                         />
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-purple-400" size={24} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                     </div>
                     <button
                         type="submit"
-                        className="btn btn-primary px-12 shadow-2xl flex items-center gap-3 transition-transform active:scale-95"
+                        className="btn btn-primary px-6 flex items-center gap-2 transition-transform active:scale-95"
                         disabled={loading || !input.trim()}
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <Send size={24} />}
-                        <span className="font-black text-xl">SEARCH</span>
+                        {loading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+                        <span className="font-semibold">Search</span>
                     </button>
                 </form>
             </div>
